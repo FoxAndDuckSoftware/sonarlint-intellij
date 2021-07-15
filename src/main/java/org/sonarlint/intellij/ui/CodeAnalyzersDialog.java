@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -25,9 +25,9 @@ import javax.swing.JComponent;
 import org.jetbrains.annotations.Nullable;
 
 public class CodeAnalyzersDialog extends DialogWrapper {
-  @Nullable private final Project project;
+  private final Project project;
 
-  public CodeAnalyzersDialog(@Nullable Project project) {
+  public CodeAnalyzersDialog(Project project) {
     super(project);
     super.setTitle("SonarLint Additional Information");
     this.project = project;

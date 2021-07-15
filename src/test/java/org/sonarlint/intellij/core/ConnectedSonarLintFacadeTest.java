@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,11 +19,11 @@
  */
 package org.sonarlint.intellij.core;
 
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarsource.sonarlint.core.client.api.common.LogOutput;
 import org.sonarsource.sonarlint.core.client.api.common.ProgressMonitor;
 import org.sonarsource.sonarlint.core.client.api.common.analysis.AnalysisResults;
@@ -31,8 +31,6 @@ import org.sonarsource.sonarlint.core.client.api.common.analysis.IssueListener;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedAnalysisConfiguration;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedRuleDetails;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
-
-import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -46,7 +44,6 @@ public class ConnectedSonarLintFacadeTest extends AbstractSonarLintLightTests {
 
   @Before
   public void before() {
-    replaceProjectService(SonarLintProjectSettings.class, getProjectSettings());
     getProjectSettings().setProjectKey("projectKey");
     facade = new ConnectedSonarLintFacade(engine, getProject());
   }
@@ -64,7 +61,7 @@ public class ConnectedSonarLintFacadeTest extends AbstractSonarLintLightTests {
   public void should_get_rule_details() {
     ConnectedRuleDetails ruleDetails = mock(ConnectedRuleDetails.class);
     when(engine.getActiveRuleDetails("rule1", "projectKey")).thenReturn(ruleDetails);
-    assertThat(facade.ruleDetails("rule1")).isEqualTo(ruleDetails);
+    assertThat(facade.getActiveRuleDetails("rule1")).isEqualTo(ruleDetails);
   }
 
   @Test
@@ -84,7 +81,7 @@ public class ConnectedSonarLintFacadeTest extends AbstractSonarLintLightTests {
     AnalysisResults results = mock(AnalysisResults.class);
     ArgumentCaptor<ConnectedAnalysisConfiguration> configCaptor = ArgumentCaptor.forClass(ConnectedAnalysisConfiguration.class);
     when(engine.analyze(configCaptor.capture(), any(IssueListener.class), any(LogOutput.class), any(ProgressMonitor.class))).thenReturn(results);
-    assertThat(facade.startAnalysis(Collections.emptyList(), mock(IssueListener.class), Collections.emptyMap(), mock(ProgressMonitor.class))).isEqualTo(results);
+    assertThat(facade.startAnalysis(getModule(), Collections.emptyList(), mock(IssueListener.class), Collections.emptyMap(), mock(ProgressMonitor.class))).isEqualTo(results);
     ConnectedAnalysisConfiguration config = configCaptor.getValue();
     assertThat(config.projectKey()).isEqualTo(projectKey);
   }

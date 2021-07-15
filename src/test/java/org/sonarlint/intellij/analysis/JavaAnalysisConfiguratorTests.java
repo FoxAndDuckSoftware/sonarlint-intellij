@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -47,6 +47,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.jetbrains.annotations.NotNull;
@@ -54,6 +55,7 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.Rule;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
+import org.sonarlint.intellij.java.JavaAnalysisConfigurator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -176,22 +178,22 @@ public class JavaAnalysisConfiguratorTests extends AbstractSonarLintLightTests {
     CompilerConfiguration.getInstance(getProject()).setBytecodeTargetLevel(getModule(), null);
 
     IdeaTestUtil.setModuleLanguageLevel(getModule(), LanguageLevel.JDK_1_8);
-    assertThat(underTest.configure(getModule())).contains(entry("sonar.java.source", "8"), entry("sonar.java.target", "8"));
+    assertThat(underTest.configure(getModule(), Collections.emptyList()).extraProperties).contains(entry("sonar.java.source", "8"), entry("sonar.java.target", "8"));
 
     IdeaTestUtil.setModuleLanguageLevel(getModule(), LanguageLevel.JDK_1_9);
-    assertThat(underTest.configure(getModule())).contains(entry("sonar.java.source", "9"), entry("sonar.java.target", "9"));
+    assertThat(underTest.configure(getModule(), Collections.emptyList()).extraProperties).contains(entry("sonar.java.source", "9"), entry("sonar.java.target", "9"));
   }
 
   @Test
   public void testSourceAndTarget_with_different_target() {
     IdeaTestUtil.setModuleLanguageLevel(getModule(), LanguageLevel.JDK_1_8);
     CompilerConfiguration.getInstance(getProject()).setBytecodeTargetLevel(getModule(), "7");
-    assertThat(underTest.configure(getModule())).contains(entry("sonar.java.source", "8"), entry("sonar.java.target", "7"));
+    assertThat(underTest.configure(getModule(), Collections.emptyList()).extraProperties).contains(entry("sonar.java.source", "8"), entry("sonar.java.target", "7"));
   }
 
   @Test
   public void testClasspath() {
-    final Map<String, String> props = underTest.configure(getModule());
+    final Map<String, String> props = underTest.configure(getModule(), Collections.emptyList()).extraProperties;
     assertThat(Stream.of(props.get("sonar.java.binaries").split(",")).map(Paths::get))
       .containsExactly(compilerOutputDirFile.toPath());
     assertThat(Stream.of(props.get("sonar.java.libraries").split(",")).map(Paths::get))
@@ -214,6 +216,7 @@ public class JavaAnalysisConfiguratorTests extends AbstractSonarLintLightTests {
         exportedLibInDependentModuleFile.toPath(),
         testDependentModCompilerOutputDirFile.toPath(),
         exportedLibInTestDependentModuleFile.toPath());
+    assertThat(Paths.get(props.get("sonar.java.jdkHome"))).isEqualTo(FAKE_JDK_ROOT_PATH.resolve("jdk1.8"));
   }
 
   private static Sdk addRtJarTo(@NotNull Sdk jdk) {
@@ -223,6 +226,7 @@ public class JavaAnalysisConfiguratorTests extends AbstractSonarLintLightTests {
       throw new RuntimeException(e);
     }
     SdkModificator sdkModificator = jdk.getSdkModificator();
+    sdkModificator.setHomePath(FAKE_JDK_ROOT_PATH.resolve("jdk1.8").toString());
     sdkModificator.addRoot(findJar("jdk1.8/lib/rt.jar"), OrderRootType.CLASSES);
     sdkModificator.addRoot(findJar("jdk1.8/lib/another.jar"), OrderRootType.CLASSES);
     sdkModificator.commitChanges();

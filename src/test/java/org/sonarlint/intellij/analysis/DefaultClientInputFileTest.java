@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -37,6 +37,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
+import org.sonarsource.sonarlint.core.client.api.common.Language;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -68,10 +69,9 @@ public class DefaultClientInputFileTest {
 
   @Test
   public void testNoDoc() throws IOException, URISyntaxException {
-    when(vFile.contentsToByteArray()).thenReturn("test string".getBytes(StandardCharsets.UTF_8));
-    when(vFile.getInputStream()).thenReturn(new ByteArrayInputStream("test string".getBytes(StandardCharsets.UTF_8)));
+    when(vFile.getInputStream()).thenAnswer(i -> new ByteArrayInputStream("test string".getBytes(StandardCharsets.UTF_8)));
 
-    inputFile = new DefaultClientInputFile(vFile, "unused", true, StandardCharsets.UTF_8);
+    inputFile = new DefaultClientInputFile(vFile, "unused", true, StandardCharsets.UTF_8, Language.JAVA);
 
     assertThat(inputFile.uri()).isEqualTo(file.toURI());
     assertThat(inputFile.uri().toString()).endsWith("/My%20Projects/sonar-clirr/src/main/java/org/sonar/plugins/clirr/ClirrSensor.java");
@@ -81,6 +81,7 @@ public class DefaultClientInputFileTest {
     assertThat(Paths.get(inputFile.getPath())).isEqualTo(file.toPath());
     assertThat(inputFile.getClientObject()).isEqualTo(vFile);
     assertThat(inputFile.contents()).isEqualTo("test string");
+    assertThat(inputFile.language()).isEqualTo(Language.JAVA);
     try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputFile.inputStream()))) {
       assertThat(reader.lines().collect(Collectors.joining())).isEqualTo("test string");
     }
@@ -90,9 +91,10 @@ public class DefaultClientInputFileTest {
   public void testDoc() throws IOException {
     Document doc = mock(Document.class);
     when(doc.getText()).thenReturn("test string");
-    inputFile = new DefaultClientInputFile(vFile, "unused", true, StandardCharsets.UTF_8, doc);
+    inputFile = new DefaultClientInputFile(vFile, "unused", true, StandardCharsets.UTF_8, doc, null);
 
     assertThat(inputFile.contents()).isEqualTo("test string");
+    assertThat(inputFile.language()).isNull();
     try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputFile.inputStream()))) {
       assertThat(reader.lines().collect(Collectors.joining())).isEqualTo("test string");
     }
@@ -100,7 +102,7 @@ public class DefaultClientInputFileTest {
 
   @Test
   public void testUriRoundTrip() throws URISyntaxException {
-    inputFile = new DefaultClientInputFile(vFile, "unused", true, StandardCharsets.UTF_8);
+    inputFile = new DefaultClientInputFile(vFile, "unused", true, StandardCharsets.UTF_8, null);
 
     // This check is important to have the URIPredicate working (see SLI-379)
     assertThat(Paths.get(inputFile.getPath()).toUri()).isEqualTo(inputFile.uri());

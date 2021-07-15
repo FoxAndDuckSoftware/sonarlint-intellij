@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,14 +20,14 @@
 package org.sonarlint.intellij.config.global.wizard;
 
 import org.junit.Test;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.config.global.ServerConnection;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class WizardModelTest {
   @Test
   public void testCreateFromConfig() {
-    SonarQubeServer server = SonarQubeServer.newBuilder()
+    ServerConnection server = ServerConnection.newBuilder()
       .setName("name")
       .setToken("token")
       .setOrganizationKey("org")
@@ -40,7 +40,7 @@ public class WizardModelTest {
     assertThat(model.getPassword()).isNull();
     assertThat(model.getToken()).isEqualTo("token");
     assertThat(model.getOrganizationKey()).isEqualTo("org");
-    assertThat(model.getOrganizationList()).isNull();
+    assertThat(model.getOrganizationList()).isEmpty();
     assertThat(model.getName()).isEqualTo("name");
     assertThat(model.getServerUrl()).isEqualTo("url");
   }
@@ -57,7 +57,7 @@ public class WizardModelTest {
 
     model.setServerType(WizardModel.ServerType.SONARQUBE);
 
-    SonarQubeServer server = model.createServer();
+    ServerConnection server = model.createConnection();
     assertThat(server.getHostUrl()).isEqualTo("url");
     assertThat(server.enableProxy()).isTrue();
     assertThat(server.getLogin()).isEqualTo("login");
@@ -76,7 +76,7 @@ public class WizardModelTest {
 
     model.setServerType(WizardModel.ServerType.SONARCLOUD);
 
-    SonarQubeServer server = model.createServer();
+    ServerConnection server = model.createConnection();
     assertThat(server.getHostUrl()).isEqualTo("https://sonarcloud.io");
     assertThat(server.getLogin()).isNull();
     assertThat(server.getPassword()).isNull();
@@ -86,7 +86,7 @@ public class WizardModelTest {
 
   @Test
   public void testMigrationSonarCloud() {
-    SonarQubeServer server = SonarQubeServer.newBuilder()
+    ServerConnection server = ServerConnection.newBuilder()
       .setName("name")
       .setToken("token")
       .setOrganizationKey("org")
@@ -95,7 +95,7 @@ public class WizardModelTest {
       .build();
     WizardModel model = new WizardModel(server);
 
-    server = model.createServer();
+    server = model.createConnection();
     assertThat(server.enableProxy()).isTrue();
     assertThat(server.getHostUrl()).isEqualTo("https://sonarcloud.io");
   }

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -63,7 +63,7 @@ public class IssueTreeModelBuilderTest {
     addFile(data, "file3", 2);
 
     treeBuilder.updateModel(data, "empty");
-    IssueNode first = treeBuilder.getNextIssue((AbstractNode<?>) model.getRoot());
+    IssueNode first = treeBuilder.getNextIssue((AbstractNode) model.getRoot());
     assertNode(first, "file1", 1);
 
     IssueNode second = treeBuilder.getNextIssue(first);

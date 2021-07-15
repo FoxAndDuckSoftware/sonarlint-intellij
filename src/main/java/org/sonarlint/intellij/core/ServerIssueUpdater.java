@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -43,20 +43,21 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarlint.intellij.issue.IssueManager;
 import org.sonarlint.intellij.issue.ServerIssueTrackable;
 import org.sonarlint.intellij.issue.tracking.Trackable;
-import org.sonarlint.intellij.ui.SonarLintConsole;
 import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ProjectBinding;
-import org.sonarsource.sonarlint.core.client.api.connected.ServerConfiguration;
 import org.sonarsource.sonarlint.core.client.api.connected.ServerIssue;
 import org.sonarsource.sonarlint.core.client.api.exceptions.DownloadException;
+
+import static org.sonarlint.intellij.config.Settings.getSettingsFor;
 
 public class ServerIssueUpdater implements Disposable {
 
@@ -65,8 +66,6 @@ public class ServerIssueUpdater implements Disposable {
   private static final int THREADS_NUM = 5;
   private static final int QUEUE_LIMIT = 100;
   private static final int FETCH_ALL_ISSUES_THRESHOLD = 10;
-  private static final int CONNECTION_TIMEOUT = 5_000;
-  private static final int READ_TIMEOUT = 2 * 60_000;
   private final Project myProject;
 
   private final ExecutorService executorService;
@@ -84,7 +83,7 @@ public class ServerIssueUpdater implements Disposable {
   }
 
   public void fetchAndMatchServerIssues(Map<Module, Collection<VirtualFile>> filesPerModule, ProgressIndicator indicator, boolean waitForCompletion) {
-    SonarLintProjectSettings projectSettings = SonarLintUtils.getService(myProject, SonarLintProjectSettings.class);
+    SonarLintProjectSettings projectSettings = getSettingsFor(myProject);
     if (!projectSettings.isBindingEnabled()) {
       // not in connected mode
       return;
@@ -92,7 +91,7 @@ public class ServerIssueUpdater implements Disposable {
 
     try {
       ProjectBindingManager projectBindingManager = SonarLintUtils.getService(myProject, ProjectBindingManager.class);
-      SonarQubeServer server = projectBindingManager.getSonarQubeServer();
+      ServerConnection connection = projectBindingManager.getServerConnection();
       ConnectedSonarLintEngine engine = projectBindingManager.getConnectedEngine();
       String projectKey = projectSettings.getProjectKey();
 
@@ -113,7 +112,7 @@ public class ServerIssueUpdater implements Disposable {
       indicator.setText(msg);
 
       // submit tasks
-      List<Future<Void>> updateTasks = fetchAndMatchServerIssues(projectKey, filesPerModule, server, engine, downloadAll);
+      List<Future<Void>> updateTasks = fetchAndMatchServerIssues(projectKey, filesPerModule, connection, engine, downloadAll);
 
       if (waitForCompletion) {
         waitForTasks(updateTasks);
@@ -137,7 +136,7 @@ public class ServerIssueUpdater implements Disposable {
   }
 
   private List<Future<Void>> fetchAndMatchServerIssues(String projectKey, Map<Module, Collection<VirtualFile>> filesPerModule,
-    SonarQubeServer server, ConnectedSonarLintEngine engine, boolean downloadAll) {
+                                                       ServerConnection server, ConnectedSonarLintEngine engine, boolean downloadAll) {
     List<Future<Void>> futureList = new LinkedList<>();
 
     if (!downloadAll) {
@@ -150,7 +149,7 @@ public class ServerIssueUpdater implements Disposable {
     return futureList;
   }
 
-  private List<Future<Void>> downloadAndMatchAllServerIssues(String projectKey, Map<Module, Collection<VirtualFile>> filesPerModule, SonarQubeServer server,
+  private List<Future<Void>> downloadAndMatchAllServerIssues(String projectKey, Map<Module, Collection<VirtualFile>> filesPerModule, ServerConnection server,
     ConnectedSonarLintEngine engine) {
     IssueUpdater issueUpdater = new IssueUpdater(server, engine);
 
@@ -175,7 +174,7 @@ public class ServerIssueUpdater implements Disposable {
     return moduleBindingManager.getBinding();
   }
 
-  private List<Future<Void>> fetchAndMatchServerIssues(String projectKey, Module module, Collection<VirtualFile> files, SonarQubeServer server, ConnectedSonarLintEngine engine) {
+  private List<Future<Void>> fetchAndMatchServerIssues(String projectKey, Module module, Collection<VirtualFile> files, ServerConnection server, ConnectedSonarLintEngine engine) {
     List<Future<Void>> futureList = new LinkedList<>();
     ProjectBinding binding = getProjectBinding(module);
     Map<VirtualFile, String> relativePathPerFile = getRelativePaths(module.getProject(), files);
@@ -220,10 +219,10 @@ public class ServerIssueUpdater implements Disposable {
   }
 
   private class IssueUpdater {
-    private final SonarQubeServer server;
+    private final ServerConnection server;
     private final ConnectedSonarLintEngine engine;
 
-    private IssueUpdater(SonarQubeServer server, ConnectedSonarLintEngine engine) {
+    private IssueUpdater(ServerConnection server, ConnectedSonarLintEngine engine) {
       this.server = server;
       this.engine = engine;
     }
@@ -240,9 +239,8 @@ public class ServerIssueUpdater implements Disposable {
 
     public void downloadAllServerIssues(String projectKey) {
       try {
-        ServerConfiguration serverConfiguration = SonarLintUtils.getServerConfiguration(server, CONNECTION_TIMEOUT, READ_TIMEOUT);
         LOGGER.debug("fetchServerIssues projectKey=" + projectKey);
-        engine.downloadServerIssues(serverConfiguration, projectKey);
+        engine.downloadServerIssues(server.getEndpointParams(), server.getHttpClient(), projectKey, true, null);
       } catch (DownloadException e) {
         SonarLintConsole console = SonarLintUtils.getService(myProject, SonarLintConsole.class);
         console.info(e.getMessage());
@@ -268,9 +266,8 @@ public class ServerIssueUpdater implements Disposable {
 
     private List<ServerIssue> fetchServerIssuesForFile(ProjectBinding projectBinding, String relativePath) {
       try {
-        ServerConfiguration serverConfiguration = SonarLintUtils.getServerConfiguration(server, CONNECTION_TIMEOUT, READ_TIMEOUT);
         LOGGER.debug("fetchServerIssues projectKey=" + projectBinding.projectKey() + ", filepath=" + relativePath);
-        return engine.downloadServerIssues(serverConfiguration, projectBinding, relativePath);
+        return engine.downloadServerIssues(server.getEndpointParams(), server.getHttpClient(), projectBinding, relativePath, true,null);
       } catch (DownloadException e) {
         SonarLintConsole console = SonarLintUtils.getService(myProject, SonarLintConsole.class);
         console.info(e.getMessage());

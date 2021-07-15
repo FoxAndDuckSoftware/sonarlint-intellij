@@ -1,7 +1,7 @@
 <!--
 
     SonarLint for IntelliJ IDEA
-    Copyright (C) 2015-2020 SonarSource
+    Copyright (C) 2015-2021 SonarSource
     sonarlint@sonarsource.com
 
     This program is free software; you can redistribute it and/or
@@ -28,28 +28,48 @@
     <description><![CDATA[
         <html>
             <p>
-                SonarLint is a free IDE extension that lets you fix bugs and vulnerabilities as you write code!
-                Like a spell checker, SonarLint highlights coding issues on the fly, with clear remediation
-                guidance so you can fix them before the code is even committed. Across popular IDEs (Eclipse,
-                IntelliJ, Visual Studio, VS Code) and popular programming languages, SonarLint helps all developers
-                write better and safer code!
+                SonarLint is a free IDE extension to find and fix bugs, vulnerabilities and code smells as you write code!
+                Like a spell checker, SonarLint highlights issues on the fly, with clear remediation guidance so you can fix
+                them before the code is even committed. With support for several popular and classic languages,
+                SonarLint helps developers of all experience and skill levels write efficient, safe code.
             </p>
             <br/>
             <p>
-                SonarLint supports all JetBrains IDE, including IntelliJ, WebStorm, PhpStorm, PyCharm and RubyMine.
-                It can analyze code written in Java, JavaScript, TypeScript, Python, Kotlin, Ruby, HTML & PHP.
+                SonarLint integrates with most JetBrains IDEs including
+                IntelliJ IDEA, CLion, WebStorm, PHPStorm, PyCharm, Rider, Android Studio & RubyMine. Supported languages include
+                C, C++, Java, JavaScript, TypeScript, Python, C#, Kotlin, Ruby, HTML & PHP.
             </p>
             <br/>
             <p>
-                If your project is analyzed on SonarQube or on SonarCloud, SonarLint can connect to 
-                the server to retrieve the appropriate quality profiles and settings for that project. Java 8 
-                is required to run SonarLint; analysis of JavaScript and TypeScript requires Node.js >= 8.
+                SonarLint isn't just about your code, it's also an opportunity to bring your passion for quality code to the whole team.
+                When paired with <a href="https://www.sonarqube.org/">SonarQube</a> or <a href="https://sonarcloud.io/">SonarCloud</a>,
+                your team can share common language rulesets, project analysis settings
+                and <a href="https://www.sonarlint.org/bring-your-team-on-board/">more</a>.
+                The combination forms a continuous analysis solution that keeps code quality and security issues out of your branches.
+            </p>
+            <br/>
+            <p>
+                SonarLint requires your IDE to be run with a JVM 8+ (this is the case for all recent JetBrains IDE);
+                the analysis of JavaScript and TypeScript requires Node.js >= 10.12 to be installed on your computer.
             </p>
         </html>
       ]]></description>
 
     <change-notes><![CDATA[
       <ul>
+        <li>5.2 - 2 new rules for Java. Support TS 4.3 and now .vue files analysis possible. MSVC support for CLion. Rules improvements for Java, CFamily and JS/TS.</li>
+        <li>5.1 - Fixed false-positives and false-negatives in Kotlin analysis.</li>
+        <li>5.0.1 - Fix exceptions in registration of application listeners and during analysis on older versions of the IntelliJ platform. Fix UI freezes.</li>
+        <li>5.0 - Improve precision of Python analyses thanks to cross-module resolution of symbols. Drop support of SonarQube < 7.9 for connected mode. Fixed false-positives and false-negatives in C/C++ analysis. Bug fixes and improvements.</li>
+        <li>4.16 - 3 new rules for C++20. Improved JS/TS rules. Fixed false positive in HTML analysis. Improved PHP rules.</li>
+        <li>4.15 - Support analysis of C/C++ in CLion. Support TypeScript 4.1 and 4.2. Rules improvements for Java and Python. Minimal supported version is 2019.3.</li>
+        <li>4.14.2 - Fix exceptions thrown during analysis and work around an issue with latest EAP.</li>
+        <li>4.14.1 - Fix an error occurring after each analysis. Fix the regression on UI responsiveness.</li>
+        <li>4.14 - New rules for regexp in Java, Java 15 support. All JS rules now based on the TypeScript parser. Rules improvements for PHP and Python. Support for Ruby 3.0.0. Support of Python 3.9. Investigate taint vulnerabilities detected by SonarQube 8.6+ or SonarCloud.</li>
+        <li>4.13 - New or improved rules for access control or authentication in Java. Security rules for JS/TS. Support of PHP 8, improved rules. Updated Kotlin and Ruby analyzers, supporting latest language features and improved rules. Updated HTML analyzer with improved rules. Reworked server notifications. Review a Security Hotspot within its context.</li>
+        <li>4.12 - Lots of new rules for Java (including test code), support analysis of Java 14. 20 new rules for PHP, including 13 related to unit tests. 2 new rules for JavaScript. 3 new rules for Python. Bug fixes and improvements.</li>
+        <li>4.11 - Improve issues, flows and secondary locations navigation and highlighting. Show secondary location indexes in the editor. Add 'Show rule description' and 'Show data flow/issue locations' contextual actions. Relax search criteria in rule configuration filter. Show effective rule parameter in the rule description panel. Bug fixes and improvements.</li>
+        <li>4.10 - Fix duplicated annotations for PHP files. Display rule severity defined in the quality profile in connected mode. Fix analysis failure with JSP files. Bug fixes and improvements for JS files. 4 new rules (3 security related), bug fixes and improvements for PHP files.</li>
         <li>4.9 - Many new rules about JUnit and AssertJ for Java test files. 10 new rules for PHP. 22 new rules for Python and support of Typeshed packages. Preparatory changes for dynamic plugin installation.</li>
         <li>4.8 - Configure rule parameters in IDE settings. Performance improvement and fewer false positives for PHP. 4 new vulnerability detection rules for Python.</li>
         <li>4.7 - 2 new rules and performance improvements for Java. 2 new rules for Python.</li>
@@ -105,17 +125,23 @@
 
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
     // we need listeners registration
-    <idea-version since-build="183.2940.10"/>
+    <idea-version since-build="193.5233.102"/>
 
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
          on how to target different products -->
     <depends>com.intellij.modules.lang</depends>
     <depends optional="true" config-file="plugin-java.xml">com.intellij.modules.java</depends>
+    <depends optional="true" config-file="plugin-clion.xml">com.intellij.modules.clion</depends>
+    <depends optional="true" config-file="plugin-rider.xml">com.intellij.modules.rider</depends>
 
+    <projectListeners>
+        <listener class="org.sonarlint.intellij.module.ModuleChangeListener" topic="com.intellij.openapi.project.ModuleListener"/>
+        <listener class="org.sonarlint.intellij.module.ModuleEngineChangeListener" topic="org.sonarlint.intellij.messages.ProjectEngineListener"/>
+    </projectListeners>
 
     <extensions defaultExtensionNs="com.intellij">
         <codeInsight.linkHandler prefix="#sonarissue/" handlerClass="org.sonarlint.intellij.editor.SonarLinkHandler"/>
-        <toolWindow id="SonarLint" anchor="bottom" icon="/images/ico-sonarlint-13.png" factoryClass="org.sonarlint.intellij.ui.SonarLintToolWindowFactory"/>
+        <toolWindow id="SonarLint" anchor="bottom" icon="/images/ico-sonarlint-13.png" factoryClass="org.sonarlint.intellij.ui.SonarLintToolWindowFactory" canCloseContents="true"/>
         <applicationConfigurable groupId="tools" id="sonarlint" displayName="SonarLint" instance="org.sonarlint.intellij.config.global.SonarLintGlobalConfigurable"/>
         <projectConfigurable parentId="sonarlint" displayName="Project Settings" instance="org.sonarlint.intellij.config.project.SonarLintProjectConfigurable" nonDefaultProject="true"/>
         <moduleConfigurable id="SonarLint" displayName="SonarLint" instance="org.sonarlint.intellij.config.module.SonarLintModuleConfigurable"/>
@@ -124,12 +150,11 @@
         <additionalTextAttributes scheme="Default" file="colorSchemes/SonarLintDefault.xml"/>
         <additionalTextAttributes scheme="Darcula" file="colorSchemes/SonarLintDarcula.xml"/>
         <editorActionHandler action="EditorEscape" implementationClass="org.sonarlint.intellij.editor.EscapeHandler"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.editor.SonarLintHighlighting"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.actions.IssuesViewTabOpener"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.editor.EditorDecorator"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.actions.SonarLintToolWindow"/>
         <errorHandler implementation="org.sonarlint.intellij.errorsubmitter.BlameSonarSource"/>
 
         <!-- BE CAREFUL to not register the annotator twice for the same language (taking into account inheritance) or the annotation will appear multiple times -->
-        <externalAnnotator language="JAVA" implementationClass="org.sonarlint.intellij.editor.SonarExternalAnnotator"/>
         <externalAnnotator language="kotlin" implementationClass="org.sonarlint.intellij.editor.SonarExternalAnnotator"/>
         <externalAnnotator language="Python" implementationClass="org.sonarlint.intellij.editor.SonarExternalAnnotator"/>
         <externalAnnotator language="PHP" implementationClass="org.sonarlint.intellij.editor.SonarExternalAnnotator"/>
@@ -141,9 +166,8 @@
         <externalAnnotator language="Scala" implementationClass="org.sonarlint.intellij.editor.SonarExternalAnnotator"/>
         <externalAnnotator language="Swift" implementationClass="org.sonarlint.intellij.editor.SonarExternalAnnotator"/>
 
-        <applicationService serviceImplementation="org.sonarlint.intellij.config.global.SonarLintGlobalSettings"/>
+        <applicationService serviceImplementation="org.sonarlint.intellij.config.global.SonarLintGlobalSettingsStore"/>
         <applicationService serviceImplementation="org.sonarlint.intellij.core.SonarLintEngineManager"/>
-        <applicationService serviceImplementation="org.sonarlint.intellij.core.SonarLintEngineFactory"/>
         <applicationService serviceImplementation="org.sonarlint.intellij.SonarLintPlugin"/>
         <applicationService serviceInterface="org.sonarlint.intellij.util.GlobalLogOutput"
                             serviceImplementation="org.sonarlint.intellij.util.GlobalLogOutputImpl"
@@ -151,42 +175,57 @@
         <applicationService serviceImplementation="org.sonarlint.intellij.util.SonarLintActions"/>
         <applicationService serviceInterface="org.sonarlint.intellij.telemetry.SonarLintTelemetry"
                             serviceImplementation="org.sonarlint.intellij.telemetry.SonarLintTelemetryImpl" />
-        <applicationService serviceImplementation="org.sonarlint.intellij.core.ServerNotifications"/>
+        <applicationService serviceImplementation="org.sonarlint.intellij.core.ServerNotificationsService"/>
+        <applicationService serviceImplementation="org.sonarlint.intellij.core.NodeJsManager"/>
+        <applicationService serviceImplementation="org.sonarlint.intellij.server.SonarLintHttpServer"/>
+        <applicationService serviceImplementation="org.sonarlint.intellij.fs.ModuleFileEventsNotifier"/>
+        <applicationService serviceImplementation="org.sonarlint.intellij.module.ModulesRegistry"/>
+        <applicationService serviceInterface="org.sonarlint.intellij.util.ThreadPoolExecutor"
+                            serviceImplementation="org.sonarlint.intellij.util.ApplicationThreadPoolExecutor"
+                            testServiceImplementation="org.sonarlint.intellij.util.SynchronousThreadPoolExecutor"/>
 
         <projectService serviceImplementation="org.sonarlint.intellij.core.ProjectBindingManager"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.config.project.SonarLintProjectSettings"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.config.project.SonarLintProjectSettingsStore"/>
         <projectService serviceImplementation="org.sonarlint.intellij.core.SonarLintProjectNotifications"/>
-        <projectService serviceInterface="org.sonarlint.intellij.ui.SonarLintConsole"
+        <projectService serviceInterface="org.sonarlint.intellij.common.ui.SonarLintConsole"
                         serviceImplementation="org.sonarlint.intellij.ui.SonarLintConsoleImpl"
                         testServiceImplementation="org.sonarlint.intellij.ui.SonarLintConsoleTestImpl"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.analysis.SonarLintJobManager"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.core.ProjectServerNotifications"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.analysis.AnalysisManager"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.core.ProjectServerNotificationsSubscriber"/>
         <projectService serviceImplementation="org.sonarlint.intellij.issue.IssueStore"/>
         <projectService serviceImplementation="org.sonarlint.intellij.editor.CodeAnalyzerRestarter"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.issue.persistence.LiveIssueCache"/>
         <projectService serviceImplementation="org.sonarlint.intellij.issue.persistence.IssuePersistence"/>
         <projectService serviceImplementation="org.sonarlint.intellij.config.project.SonarLintProjectState"/>
         <projectService serviceImplementation="org.sonarlint.intellij.issue.IssueManager"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.issue.IssueProcessor"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.analysis.SonarLintStatus"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.issue.LiveIssueBuilder"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.analysis.AnalysisStatus"/>
         <projectService serviceImplementation="org.sonarlint.intellij.trigger.EditorChangeTrigger"/>
         <projectService serviceImplementation="org.sonarlint.intellij.analysis.SonarLintAnalyzer"/>
         <projectService serviceImplementation="org.sonarlint.intellij.core.ServerIssueUpdater"/>
         <projectService serviceImplementation="org.sonarlint.intellij.core.UpdateChecker"/>
-        <projectService serviceImplementation="org.sonarlint.intellij.analysis.SonarLintTaskFactory"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.issue.vulnerabilities.TaintVulnerabilitiesPresenter"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.issue.vulnerabilities.TaintVulnerabilitiesRefreshTrigger"/>
+        <projectService serviceImplementation="org.sonarlint.intellij.analysis.LocalFileExclusions"/>
 
-        <moduleService serviceImplementation="org.sonarlint.intellij.analysis.VirtualFileTestPredicate"/>
         <moduleService serviceImplementation="org.sonarlint.intellij.core.ModuleBindingManager"/>
-        <moduleService serviceImplementation="org.sonarlint.intellij.config.module.SonarLintModuleSettings"/>
-        
+        <moduleService serviceImplementation="org.sonarlint.intellij.config.module.SonarLintModuleSettingsStore"/>
+
         <postStartupActivity implementation="org.sonarlint.intellij.BootstrapStartupActivity"/>
         <postStartupActivity implementation="org.sonarlint.intellij.trigger.EditorOpenTrigger"/>
+        <postStartupActivity implementation="org.sonarlint.intellij.fs.EditorFileChangeListener"/>
         <projectService serviceImplementation="org.sonarlint.intellij.trigger.SonarLintSubmitter"/>
     </extensions>
 
     <extensionPoints>
-        <extensionPoint name="AnalysisConfiguration" interface="org.sonarlint.intellij.analysis.AnalysisConfigurator" dynamic="true"/>
+        <extensionPoint name="analysisConfiguration" interface="org.sonarlint.intellij.common.analysis.AnalysisConfigurator" dynamic="true"/>
+        <extensionPoint name="languageActivator" interface="org.sonarlint.intellij.common.LanguageActivator" dynamic="true"/>
+        <extensionPoint name="fileExclusionContributor" interface="org.sonarlint.intellij.common.analysis.FileExclusionContributor" dynamic="true"/>
     </extensionPoints>
+
+    <applicationListeners>
+        <listener class="org.sonarlint.intellij.fs.VirtualFileSystemListener" topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+        <listener class="org.sonarlint.intellij.module.ProjectClosedListener" topic="com.intellij.openapi.project.ProjectManagerListener"/>
+    </applicationListeners>
 
     <actions>
         <!-- Some actions are defined in SonarLintActions so that they aren't registered in ActionManager -->

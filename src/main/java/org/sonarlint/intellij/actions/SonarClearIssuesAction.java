@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -54,7 +54,7 @@ public class SonarClearIssuesAction extends AnAction {
       DaemonCodeAnalyzer codeAnalyzer = DaemonCodeAnalyzer.getInstance(project);
 
       ApplicationManager.getApplication().runReadAction(() -> {
-        issueManager.clear();
+        issueManager.clearAllIssuesForAllFiles();
 
         // run annotator to remove highlighting of issues
         FileEditorManager editorManager = FileEditorManager.getInstance(project);

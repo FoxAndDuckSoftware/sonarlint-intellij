@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,19 +19,16 @@
  */
 package org.sonarlint.intellij.core;
 
-import com.intellij.openapi.project.Project;
 import java.util.Collections;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.exception.InvalidBindingException;
-import org.sonarlint.intellij.ui.SonarLintConsole;
-import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.client.api.common.SonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneSonarLintEngine;
 
@@ -57,7 +54,6 @@ public class ProjectBindingManagerTest extends AbstractSonarLintLightTests {
   public void before() throws InvalidBindingException {
     SonarLintConsole console = mock(SonarLintConsole.class);
     SonarLintProjectNotifications notifications = mock(SonarLintProjectNotifications.class);
-    replaceProjectService(SonarLintProjectSettings.class, getProjectSettings());
     replaceProjectService(SonarLintConsole.class, console);
     replaceProjectService(SonarLintProjectNotifications.class, notifications);
 
@@ -75,7 +71,7 @@ public class ProjectBindingManagerTest extends AbstractSonarLintLightTests {
   public void should_get_connected_engine() throws InvalidBindingException {
     getProjectSettings().setBindingEnabled(true);
     getProjectSettings().setProjectKey("project1");
-    getProjectSettings().setServerId("server1");
+    getProjectSettings().setConnectionName("server1");
 
     assertThat(projectBindingManager.getConnectedEngine()).isNotNull();
     verify(engineManager).getConnectedEngine(any(SonarLintProjectNotifications.class), eq("server1"), eq("project1"));
@@ -91,34 +87,32 @@ public class ProjectBindingManagerTest extends AbstractSonarLintLightTests {
   public void should_create_facade_connected() throws InvalidBindingException {
     getProjectSettings().setBindingEnabled(true);
     getProjectSettings().setProjectKey("project1");
-    getProjectSettings().setServerId("server1");
+    getProjectSettings().setConnectionName("server1");
 
     assertThat(projectBindingManager.getFacade()).isInstanceOf(ConnectedSonarLintFacade.class);
   }
 
   @Test
   public void should_find_sq_server() throws InvalidBindingException {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
     getProjectSettings().setBindingEnabled(true);
     getProjectSettings().setProjectKey("project1");
-    getProjectSettings().setServerId("server1");
+    getProjectSettings().setConnectionName("server1");
 
-    SonarQubeServer server = SonarQubeServer.newBuilder().setName("server1").build();
-    globalSettings.setSonarQubeServers(Collections.singletonList(server));
-    assertThat(projectBindingManager.getSonarQubeServer()).isEqualTo(server);
+    ServerConnection server = ServerConnection.newBuilder().setName("server1").build();
+    getGlobalSettings().setServerConnections(Collections.singletonList(server));
+    assertThat(projectBindingManager.getServerConnection()).isEqualTo(server);
   }
 
   @Test
   public void fail_if_cant_find_server() throws InvalidBindingException {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
     getProjectSettings().setBindingEnabled(true);
     getProjectSettings().setProjectKey("project1");
-    getProjectSettings().setServerId("server1");
+    getProjectSettings().setConnectionName("server1");
 
-    SonarQubeServer server = SonarQubeServer.newBuilder().setName("server2").build();
-    globalSettings.setSonarQubeServers(Collections.singletonList(server));
+    ServerConnection server = ServerConnection.newBuilder().setName("server2").build();
+    getGlobalSettings().setServerConnections(Collections.singletonList(server));
     exception.expect(InvalidBindingException.class);
-    projectBindingManager.getSonarQubeServer();
+    projectBindingManager.getServerConnection();
   }
 
   @Test
@@ -132,11 +126,55 @@ public class ProjectBindingManagerTest extends AbstractSonarLintLightTests {
   @Test
   public void fail_invalid_module_binding() throws InvalidBindingException {
     getProjectSettings().setBindingEnabled(true);
-    getProjectSettings().setServerId("server1");
+    getProjectSettings().setConnectionName("server1");
     getProjectSettings().setProjectKey(null);
 
     exception.expect(InvalidBindingException.class);
     exception.expectMessage("Project has an invalid binding");
     assertThat(projectBindingManager.getFacade()).isNotNull();
+  }
+
+  @Test
+  public void should_return_connected_engine_if_started() {
+    getProjectSettings().setBindingEnabled(true);
+    getProjectSettings().setConnectionName("server1");
+    getProjectSettings().setProjectKey("key");
+    when(engineManager.getConnectedEngineIfStarted(anyString())).thenReturn(connectedEngine);
+
+    SonarLintEngine engine = projectBindingManager.getEngineIfStarted();
+
+    assertThat(engine).isEqualTo(connectedEngine);
+  }
+
+  @Test
+  public void should_return_standalone_engine_if_started() {
+    getProjectSettings().setBindingEnabled(false);
+    when(engineManager.getStandaloneEngineIfStarted()).thenReturn(standaloneEngine);
+
+    SonarLintEngine engine = projectBindingManager.getEngineIfStarted();
+
+    assertThat(engine).isEqualTo(standaloneEngine);
+  }
+
+  @Test
+  public void should_not_return_connected_engine_if_not_started() {
+    getProjectSettings().setBindingEnabled(true);
+    getProjectSettings().setConnectionName("server1");
+    getProjectSettings().setProjectKey(null);
+    when(engineManager.getConnectedEngineIfStarted("server1")).thenReturn(null);
+
+    SonarLintEngine engine = projectBindingManager.getEngineIfStarted();
+
+    assertThat(engine).isNull();
+  }
+
+  @Test
+  public void should_not_return_standalone_engine_if_not_started() {
+    getProjectSettings().setBindingEnabled(false);
+    when(engineManager.getStandaloneEngineIfStarted()).thenReturn(null);
+
+    SonarLintEngine engine = projectBindingManager.getEngineIfStarted();
+
+    assertThat(engine).isNull();
   }
 }

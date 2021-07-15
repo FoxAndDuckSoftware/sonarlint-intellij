@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -30,14 +30,14 @@ import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFile;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import javax.swing.Icon;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.sonarlint.intellij.analysis.AnalysisCallback;
-import org.sonarlint.intellij.analysis.SonarLintStatus;
+import org.sonarlint.intellij.analysis.AnalysisStatus;
 import org.sonarlint.intellij.trigger.SonarLintSubmitter;
 import org.sonarlint.intellij.trigger.TriggerType;
 import org.sonarlint.intellij.util.SonarLintUtils;
@@ -53,7 +53,7 @@ public class SonarAnalyzeAllFilesAction extends AbstractSonarAction {
     super(text, description, icon);
   }
 
-  @Override protected boolean isEnabled(AnActionEvent e, Project project, SonarLintStatus status) {
+  @Override protected boolean isEnabled(AnActionEvent e, Project project, AnalysisStatus status) {
     return !status.isRunning() && !getAllFiles(project).isEmpty();
   }
 
@@ -76,15 +76,15 @@ public class SonarAnalyzeAllFilesAction extends AbstractSonarAction {
   }
 
   private static Collection<VirtualFile> getAllFiles(Project project) {
-    List<VirtualFile> fileList = new ArrayList<>();
+    Set<VirtualFile> fileSet = new LinkedHashSet<>();
     ProjectFileIndex fileIndex = ProjectRootManager.getInstance(project).getFileIndex();
     fileIndex.iterateContent(vFile -> {
-      if (!vFile.isDirectory() && !ProjectCoreUtil.isProjectOrWorkspaceFile(vFile, vFile.getFileType())) {
-        fileList.add(vFile);
+      if (!vFile.isDirectory() && !ProjectCoreUtil.isProjectOrWorkspaceFile(vFile)) {
+        fileSet.add(vFile);
       }
       return true;
     });
-    return fileList;
+    return fileSet;
   }
 
   static boolean showWarning() {

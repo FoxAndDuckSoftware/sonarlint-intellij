@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,7 +20,11 @@
 package org.sonarlint.intellij.issue;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import org.jetbrains.annotations.Nullable;
 import org.junit.Test;
+import org.sonarsource.sonarlint.core.client.api.common.TextRange;
 import org.sonarsource.sonarlint.core.client.api.connected.ServerIssue;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +46,7 @@ public class ServerIssueTrackableTest {
     assertThat(trackable.isResolved()).isTrue();
     assertThat(trackable.getRuleKey()).isEqualTo("ruleKey");
     assertThat(trackable.getMessage()).isEqualTo("message");
-    assertThat(trackable.getLineHash()).isEqualTo("checksum".hashCode());
+    assertThat(trackable.getLineHash()).isEqualTo("lineHash".hashCode());
     assertThat(trackable.getCreationDate()).isEqualTo(1_000_000);
     assertThat(trackable.getServerIssueKey()).isEqualTo("key");
     assertThat(trackable.getLine()).isEqualTo(100);
@@ -50,17 +54,18 @@ public class ServerIssueTrackableTest {
     assertThat(trackable.getType()).isEqualTo("type");
   }
 
-  private class NullTestIssue extends TestIssue {
+  private static class NullTestIssue extends TestIssue {
     @Override public String key() {
       return "";
     }
 
-    @Override public int line() {
-      return 0;
+    @Override
+    public TextRange getTextRange() {
+      return null;
     }
   }
 
-  private class TestIssue implements ServerIssue {
+  private static class TestIssue implements ServerIssue {
     @Override public String key() {
       return "key";
     }
@@ -73,28 +78,26 @@ public class ServerIssueTrackableTest {
       return "ruleKey";
     }
 
-    @Override public int line() {
-      return 100;
+    @Override public String lineHash() {
+      return "lineHash";
     }
 
-    @Override public String message() {
+    @Override public String getMessage() {
       return "message";
-    }
-
-    @Override public String checksum() {
-      return "checksum";
     }
 
     @Override public String assigneeLogin() {
       return "assigneeLogin";
     }
 
-    @Override public String moduleKey() {
-      return "moduleKey";
+    @Override public String getFilePath() {
+      return "filePath";
     }
 
-    @Override public String filePath() {
-      return "filePath";
+    @Nullable
+    @Override
+    public String getCodeSnippet() {
+      return "snippet";
     }
 
     @Override public String severity() {
@@ -105,12 +108,17 @@ public class ServerIssueTrackableTest {
       return "type";
     }
 
-    @Override public boolean manualSeverity() {
-      return false;
-    }
-
     @Override public Instant creationDate() {
       return Instant.ofEpochMilli(1_000_000);
+    }
+
+    @Override
+    public List<Flow> getFlows() {
+      return new ArrayList<>();
+    }
+
+    @Override public TextRange getTextRange() {
+      return new TextRange(100);
     }
   }
 }

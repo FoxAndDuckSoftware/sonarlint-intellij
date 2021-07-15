@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,7 +19,6 @@
  */
 package org.sonarlint.intellij.config.global.rules;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -117,10 +116,7 @@ public class RulesFilterModel {
       return true;
     }
 
-    List<String> split = new ArrayList<>();
-    split.addAll(tokenize(rule.getName()));
-    split.addAll(tokenize(rule.getKey()));
-    return Collections.indexOfSubList(split, tokenizedText) != -1;
+    return tokenizedText.stream().allMatch(t -> rule.getKey().equalsIgnoreCase(t) || rule.getName().toLowerCase(Locale.US).contains(t));
   }
 
   private static List<String> tokenize(@Nullable String str) {

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -22,6 +22,7 @@ package org.sonarlint.intellij.config.global.rules;
 import java.util.HashMap;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
+import org.sonarsource.sonarlint.core.client.api.common.Language;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneRuleDetails;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,7 +39,7 @@ public class RulesTreeNodeTest {
     when(details.isActiveByDefault()).thenReturn(true);
     when(details.getSeverity()).thenReturn("severity");
     when(details.getType()).thenReturn("type");
-    when(details.getLanguageKey()).thenReturn("lang");
+    when(details.getLanguage()).thenReturn(Language.XOO);
 
     RulesTreeNode.Rule node = new RulesTreeNode.Rule(details, false, new HashMap<>());
     assertThat(node.getKey()).isEqualTo("key");
@@ -49,7 +50,7 @@ public class RulesTreeNodeTest {
     assertThat(node.isNonDefault()).isTrue();
     assertThat(node.severity()).isEqualTo("severity");
     assertThat(node.type()).isEqualTo("type");
-    assertThat(node.languageKey()).isEqualTo("lang");
+    assertThat(node.language()).isEqualTo(Language.XOO);
   }
 
   @Test

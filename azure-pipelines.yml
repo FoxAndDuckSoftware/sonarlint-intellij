@@ -1,3 +1,6 @@
+trigger:
+- master
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -28,20 +31,22 @@ stages:
       steps:
       - checkout: self
         fetchDepth: 1
-      - task: Cache@2
-        inputs:
-          key: 'gradle | "$(Agent.OS)"'
-          restoreKeys: gradle
-          path: $(GRADLE_USER_HOME)
-        displayName: Gradle build cache
       - template: update-gradle-version-steps.yml
+      - task: DownloadSecureFile@1
+        displayName: 'Download the sign key'
+        name: pgpSignKey
+        inputs:
+          secureFile: 'sign-key.asc'
+      - bash: gpg --dearmor < $(pgpSignKey.secureFilePath) > sign-key.pgp
       - task: Gradle@2
         inputs:
-          options: --build-cache --stacktrace -i
-          tasks: buildPlugin artifactoryPublish
+          options: --build-cache --stacktrace -i -Psigning.secretKeyRingFile=sign-key.pgp -Psigning.password=$(PGP_PASSPHRASE) -Psigning.keyId=$(PGP_KEYID)
+          tasks: :buildPlugin :artifactoryPublish
           publishJUnitResults: false
           jdkVersionOption: '1.11'
         env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: $(ARTIFACTORY_PRIVATE_READER_USERNAME)
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: $(ARTIFACTORY_PRIVATE_READER_PASSWORD)
           ARTIFACTORY_DEPLOY_USERNAME: $(ARTIFACTORY_DEPLOY_USERNAME)
           ARTIFACTORY_DEPLOY_PASSWORD: $(ARTIFACTORY_DEPLOY_PASSWORD)
           GIT_SHA1: $(Build.SourceVersion)
@@ -72,18 +77,29 @@ stages:
         fetchDepth: 1
       - task: Cache@2
         inputs:
-          key: 'gradle | "$(Agent.OS)"'
-          restoreKeys: gradle
+          key: 'test_windows | gradle | "$(Agent.OS)" | **/build.gradle.kts'
           path: $(GRADLE_USER_HOME)
         displayName: Gradle build cache
       - task: Gradle@2
         inputs:
           options: --build-cache --stacktrace -i
-          tasks: check
+          tasks: check -x :its:check
           publishJUnitResults: true
           testRunTitle: 'UTs on Windows'
           jdkVersionOption: '1.11'
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: $(ARTIFACTORY_PRIVATE_READER_USERNAME)
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: $(ARTIFACTORY_PRIVATE_READER_PASSWORD)
         displayName: 'Run UTs'
+      - task: Gradle@2
+        inputs:
+          options: --build-cache --stacktrace -i
+          tasks: :runPluginVerifier
+          jdkVersionOption: '1.11'
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: $(ARTIFACTORY_PRIVATE_READER_USERNAME)
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: $(ARTIFACTORY_PRIVATE_READER_PASSWORD)
+        displayName: 'Run plugin verifier'
       - task: Gradle@2
         inputs:
           options: --stop
@@ -98,19 +114,21 @@ stages:
       steps:
       - task: Cache@2
         inputs:
-          key: 'gradle | "$(Agent.OS)"'
-          restoreKeys: gradle
+          key: 'sonarqube | gradle | "$(Agent.OS)" | **/build.gradle.kts'
           path: $(GRADLE_USER_HOME)
         displayName: Gradle build cache
       - template: prepare-sq-analysis-steps.yml
       - task: Gradle@2
         inputs:
           options: --build-cache --stacktrace -i
-          tasks: check jacocoTestReport
+          tasks: check jacocoTestReport -x :its:check
           publishJUnitResults: false
           jdkVersionOption: '1.11'
           sonarQubeRunAnalysis: true
           sqGradlePluginVersionChoice: 'build'
+        env:
+          ARTIFACTORY_PRIVATE_READER_USERNAME: $(ARTIFACTORY_PRIVATE_READER_USERNAME)
+          ARTIFACTORY_PRIVATE_READER_PASSWORD: $(ARTIFACTORY_PRIVATE_READER_PASSWORD)
       - task: Gradle@2
         inputs:
           options: --stop
@@ -130,31 +148,98 @@ stages:
       displayName: Run ITs
       strategy:
         matrix:
-          Idea2018:
-            IDEA_VERSION: '2018.3'
-            JDKVersion: '1.11'
+          # remote-robot crashes on 2018.3
           Idea2019:
-            IDEA_VERSION: '2019.2'
-            JDKVersion: '1.11'
+            IDEA_VERSION: 'IC-2019.3'
+          CLion2019:
+            IDEA_VERSION: 'CL-2019.3'
+          Idea2020:
+            IDEA_VERSION: 'IC-2020.3.3'
+          CLion2020:
+            IDEA_VERSION: 'CL-2020.3.3'
+          LatestIdeaEAP:
+            IDEA_VERSION: 'IC-LATEST-EAP-SNAPSHOT'
+          CLion2021:
+            IDEA_VERSION: 'CL-2021.1'
       variables:
         GRADLE_USER_HOME: $(Pipeline.Workspace)/.gradle
       steps:
       - checkout: self
         fetchDepth: 1
+      - task: JavaToolInstaller@0
+        inputs:
+          versionSpec: '11'
+          jdkArchitectureOption: 'x64'
+          jdkSourceOption: 'PreInstalled'
       - task: Cache@2
         inputs:
-          key: 'gradle | "$(Agent.OS)"'
-          restoreKeys: gradle
+          key: 'its | gradle | "$(Agent.OS)" | "$(IDEA_VERSION)" | **/build.gradle.kts'
           path: $(GRADLE_USER_HOME)
         displayName: Gradle build cache
-      - task: Gradle@2
+      - template: update-gradle-version-steps.yml
+      - task: DownloadSecureFile@1
+        displayName: 'Download Maven settings'
+        name: mavenSettings
         inputs:
-          options: --stop
-          tasks: c
-          publishJUnitResults: false
-          javaHomeOption: 'JDKVersion'
-          jdkVersionOption: $(JDKVersion)
-        displayName: 'Stop Gradle daemon'
+          secureFile: 'maven-settings.xml'
+      - bash: |
+          mvn org.apache.maven.plugins:maven-dependency-plugin:3.1.1:unpack -B --settings "$(mavenSettings.secureFilePath)" -Denable-repo=qa -Dartifact=org.sonarsource.sonarlint.intellij:sonarlint-intellij:$(PROJECT_VERSION):zip "-DoutputDirectory=$(Agent.BuildDirectory)/staged-plugin"
+        displayName: 'Download staged plugin'
+        env:
+          ARTIFACTORY_QA_READER_USERNAME: $(ARTIFACTORY_QA_READER_USERNAME)
+          ARTIFACTORY_QA_READER_PASSWORD: $(ARTIFACTORY_QA_READER_PASSWORD)
+      - task: DownloadSecureFile@1
+        name: clionKey
+        displayName: 'Download CLion key'
+        inputs:
+          secureFile: 'clion.key'
+      - bash: |
+          set -e -o pipefail -u
+          sudo apt-get update
+          sudo apt-get install -y metacity xvfb xauth ffmpeg
+
+          # init xvfb and metacity
+          sudo cp .azure-pipelines/xvfb.init /etc/init.d/xvfb
+          sudo chmod +x /etc/init.d/xvfb
+          sudo update-rc.d xvfb defaults
+          sudo service xvfb start
+          sleep 10 # give xvfb some time to start
+          export DISPLAY=:10
+          metacity --sm-disable --replace &
+          sleep 10 # give metacity some time to start
+
+          mkdir -p its/build/idea-sandbox/config-uiTest/
+          cp $(clionKey.secureFilePath) its/build/idea-sandbox/config-uiTest/clion.key
+
+          echo 'Recording tests on video'
+          ffmpeg -loglevel warning -f x11grab -video_size 1280x960 -framerate 10 -i :10 -q:v 0 /tmp/recording_$(IDEA_VERSION).mp4 &
+          echo "##vso[task.setvariable variable=recordingPid;isOutput=true]$!"
+
+        name: 'prepareIts'
+        displayName: 'Prepare UI tests on $(IDEA_VERSION)'
+      - task: Gradle@2
+        displayName: 'Run ITs on $(IDEA_VERSION)'
+        inputs:
+          options: --build-cache --stacktrace -i -PijVersion=$(IDEA_VERSION) -PslPluginDirectory=$(Agent.BuildDirectory)/staged-plugin
+          tasks: :its:check
+          publishJUnitResults: true
+          testRunTitle: 'Run ITs on $(IDEA_VERSION)'
+          jdkVersionOption: '1.11'
+        env:
+          ARTIFACTORY_API_KEY: $(ARTIFACTORY_API_KEY)
+          GITHUB_TOKEN: $(GITHUB_TOKEN)
+          DISPLAY: :10
+      - bash: |
+          kill -2 $(prepareIts.recordingPid)
+        displayName: 'Stop video recording'
+        condition: always()
+      - publish: /tmp/recording_$(IDEA_VERSION).mp4
+        artifact: ITCaptureScreen_$(IDEA_VERSION)_$(System.JobAttempt)
+        condition: always()
+      - bash: |
+          cat its/build/idea-sandbox/system/log/idea.log
+        displayName: 'Log'
+        condition: always()
 - template: promote-stage.yml@commonTemplates
   parameters:
     stageDependencies:
@@ -166,7 +251,7 @@ stages:
     burgrType: 'dogfood'
     stageName: 'update_dogfood_repo'
     stageDisplayName: Update internal dogfooding plugin repo
-    stageCondition: eq(variables['Build.SourceBranchName'], 'master')
+    stageCondition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'master'))
     stageDependencies: promote
     jobs:
     - job: updateInternalSite

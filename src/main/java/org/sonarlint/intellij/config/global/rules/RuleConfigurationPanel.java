@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -24,10 +24,12 @@ import com.intellij.ide.CommonActionsManager;
 import com.intellij.ide.DefaultTreeExpander;
 import com.intellij.ide.TreeExpander;
 import com.intellij.ide.ui.search.SearchUtil;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.BrowserHyperlinkListener;
@@ -43,6 +45,7 @@ import com.intellij.ui.TitledSeparator;
 import com.intellij.ui.TreeSpeedSearch;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
+import com.intellij.ui.components.JBLoadingPanel;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.components.fields.ExpandableTextField;
@@ -67,11 +70,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -96,11 +102,14 @@ import org.sonarlint.intellij.config.ConfigurationPanel;
 import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
 import org.sonarlint.intellij.core.SonarLintEngineManager;
 import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.client.api.common.Language;
 import org.sonarsource.sonarlint.core.client.api.common.RuleDetails;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneRuleDetails;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneSonarLintEngine;
 
-public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGlobalSettings> {
+import static org.sonarlint.intellij.config.Settings.getGlobalSettings;
+
+public class RuleConfigurationPanel implements Disposable, ConfigurationPanel<SonarLintGlobalSettings> {
   private static final Logger LOG = Logger.getInstance(RuleConfigurationPanel.class);
 
   private static final String MAIN_SPLITTER_KEY = "sonarlint_rule_configuration_splitter";
@@ -109,22 +118,28 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
   // Default proportion is: 85% on top for rule description + 15% on the bottom for parameters
   private static final float DIVIDER_PROPORTION_RULE_DEFAULT = 0.85f;
   @NonNls
-  private static final String EMPTY_HTML = "<html><body>Select a rule to see the description</body></html>";
+  private static final String EMPTY_HTML = "Select a rule to see the description";
 
   private final RulesFilterModel filterModel = new RulesFilterModel(this::updateModel);
   private RulesTreeTable table;
   private JEditorPane descriptionBrowser;
-  private JPanel panel;
+  private JBLoadingPanel panel;
   private JPanel myParamsPanel;
   private RulesTreeTableModel model;
   private FilterComponent myRuleFilter;
   private TreeExpander myTreeExpander;
   private RulesParamsSeparator rulesParamsSeparator;
-  private Map<String, RulesTreeNode.Rule> allRulesStateByKey;
-  private boolean isDirty = false;
+  private final Map<String, RulesTreeNode.Rule> allRulesStateByKey = new ConcurrentHashMap<>();
+  private final Map<String, RulesTreeNode.Language> languageNodesByName = new HashMap<>();
+  private AtomicBoolean isDirty = new AtomicBoolean(false);
 
   public RuleConfigurationPanel() {
     createUIComponents();
+  }
+
+  @Override
+  public void dispose() {
+    // Only used as a parent disposable
   }
 
   @Override
@@ -134,20 +149,21 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
 
   @Override
   public boolean isModified(SonarLintGlobalSettings settings) {
-    return isDirty;
+    return isDirty.get();
   }
 
   private void recomputeDirtyState() {
-    SonarLintGlobalSettings settings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
-    Map<String, RulesTreeNode.Rule> persistedRules = loadRuleNodes(settings);
-    for (RulesTreeNode.Rule persisted : persistedRules.values()) {
-      final RulesTreeNode.Rule possiblyModified = allRulesStateByKey.get(persisted.getKey());
-      if (!persisted.equals(possiblyModified)) {
-        this.isDirty = true;
-        return;
+    ApplicationManager.getApplication().executeOnPooledThread(() -> {
+      Map<String, RulesTreeNode.Rule> persistedRules = loadRuleNodes(getGlobalSettings());
+      for (RulesTreeNode.Rule persisted : persistedRules.values()) {
+        final RulesTreeNode.Rule possiblyModified = allRulesStateByKey.get(persisted.getKey());
+        if (!persisted.equals(possiblyModified)) {
+          this.isDirty.lazySet(true);
+          return;
+        }
       }
-    }
-    this.isDirty = false;
+      this.isDirty.lazySet(false);
+    });
   }
 
   @Override
@@ -163,16 +179,24 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
 
   @Override
   public void load(SonarLintGlobalSettings settings) {
-    allRulesStateByKey = loadRuleNodes(settings);
+    // Loading rules may take time, so do that on a background thread
+    panel.startLoading();
+    ApplicationManager.getApplication().executeOnPooledThread(() -> {
+      allRulesStateByKey.clear();
+      allRulesStateByKey.putAll(loadRuleNodes(settings));
 
-    filterModel.reset(false);
-    myRuleFilter.reset();
+      UIUtil.invokeLaterIfNeeded(() -> {
+        filterModel.reset(false);
+        myRuleFilter.reset();
 
-    updateModel();
+        updateModel();
+        panel.stopLoading();
+      });
+    });
   }
 
   @NotNull
-  private Map<String, RulesTreeNode.Rule> loadRuleNodes(SonarLintGlobalSettings settings) {
+  private static Map<String, RulesTreeNode.Rule> loadRuleNodes(SonarLintGlobalSettings settings) {
     StandaloneSonarLintEngine engine = SonarLintUtils.getService(SonarLintEngineManager.class).getStandaloneEngine();
     return engine.getAllRuleDetails().stream()
       .map(r -> new RulesTreeNode.Rule(r, loadRuleActivation(settings, r), loadNonDefaultRuleParams(settings, r)))
@@ -190,17 +214,17 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
   }
 
   private void updateModel() {
-    StandaloneSonarLintEngine engine = SonarLintUtils.getService(SonarLintEngineManager.class).getStandaloneEngine();
-    Map<String, String> languagesNameByKey = engine.getAllLanguagesNameByKey();
-    Map<String, List<RulesTreeNode.Rule>> rulesByLanguage = allRulesStateByKey.values().stream()
+    TreePath[] selectionPaths = table.getTree().getSelectionPaths();
+    Map<Language, List<RulesTreeNode.Rule>> rulesByLanguage = allRulesStateByKey.values().stream()
       .filter(filterModel::filter)
-      .collect(Collectors.groupingBy(RulesTreeNode.Rule::languageKey));
+      .collect(Collectors.groupingBy(RulesTreeNode.Rule::language));
 
     RulesTreeNode rootNode = (RulesTreeNode) model.getRoot();
     rootNode.removeAllChildren();
 
-    for (Map.Entry<String, List<RulesTreeNode.Rule>> e : rulesByLanguage.entrySet()) {
-      RulesTreeNode.Language languageNode = new RulesTreeNode.Language(languagesNameByKey.get(e.getKey()));
+    for (Map.Entry<Language, List<RulesTreeNode.Rule>> e : rulesByLanguage.entrySet()) {
+      RulesTreeNode.Language languageNode = getOrCreateLanguageNode(e.getKey().getLabel());
+      languageNode.removeAllChildren();
       for (RulesTreeNode.Rule r : e.getValue()) {
         languageNode.add(r);
       }
@@ -213,6 +237,12 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
     if (!filterModel.isEmpty()) {
       TreeUtil.expandAll(table.getTree());
     }
+    table.getTree().setSelectionPaths(selectionPaths);
+  }
+
+  @NotNull
+  private RulesTreeNode.Language getOrCreateLanguageNode(String languageName) {
+    return languageNodesByName.computeIfAbsent(languageName, RulesTreeNode.Language::new);
   }
 
   private static boolean loadRuleActivation(SonarLintGlobalSettings settings, StandaloneRuleDetails ruleDetails) {
@@ -291,17 +321,17 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
     inspectionTreePanel.add(northPanel, BorderLayout.NORTH);
     inspectionTreePanel.add(mainSplitter, BorderLayout.CENTER);
 
-    panel = new JPanel(new BorderLayout());
+    panel = new JBLoadingPanel(new BorderLayout(), this);
     panel.add(inspectionTreePanel, BorderLayout.CENTER);
 
-    JBLabel label = new JBLabel("<html><b>Note: </b>When a project is connected to a SonarQube server or SonarCloud, only rules configuration from the server applies.</html>");
+    JBLabel label = new JBLabel("<html><b>Note: </b>When a project is bound to a SonarQube server or SonarCloud, only rules configuration from the server applies.</html>");
     panel.add(label, BorderLayout.NORTH);
     return panel;
   }
 
   private void initOptionsAndDescriptionPanel() {
     myParamsPanel.removeAll();
-    readHTML(descriptionBrowser, EMPTY_HTML);
+    readHTML(descriptionBrowser, toHTML(descriptionBrowser, EMPTY_HTML, false));
     myParamsPanel.validate();
     myParamsPanel.repaint();
   }
@@ -426,6 +456,13 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
         configPanelAnchor.add(ScrollPaneFactory.createScrollPane(additionalConfigPanel, SideBorder.NONE));
       }
     }
+  }
+
+  public void selectRule(String ruleKey) {
+    myRuleFilter.setFilter(ruleKey);
+    RulesTreeNode.Rule node = allRulesStateByKey.get(ruleKey);
+    TreePath path = new TreePath(node.getPath());
+    table.getTree().setSelectionPath(path);
   }
 
   private static class ConfigPanelState {
@@ -662,7 +699,7 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
     return HintUtil.prepareHintText(text, hintHint);
   }
 
-  public RulesTreeNode.Rule getStrictlySelectedToolNode() {
+  private RulesTreeNode.Rule getStrictlySelectedToolNode() {
     TreePath[] paths = table.getTree().getSelectionPaths();
     return paths != null && paths.length == 1 && paths[0].getLastPathComponent() instanceof RulesTreeNode.Rule
       ? (RulesTreeNode.Rule) paths[0].getLastPathComponent()
@@ -744,4 +781,5 @@ public class RuleConfigurationPanel implements ConfigurationPanel<SonarLintGloba
     }
 
   }
+
 }

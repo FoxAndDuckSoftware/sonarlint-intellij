@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -25,25 +25,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintMockedTests;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class GlobalConfigurationListenerTest extends AbstractSonarLintMockedTests {
-  private List<SonarQubeServer> testList = new LinkedList<>();
+  private List<ServerConnection> testList = new LinkedList<>();
 
   @Before
   public void prepare() {
-    testList.add(SonarQubeServer.newBuilder().setName("name").build());
+    testList.add(ServerConnection.newBuilder().setName("name").build());
   }
 
   @Test
   public void testChanged() {
-    List<SonarQubeServer> servers = new LinkedList<>();
+    List<ServerConnection> servers = new LinkedList<>();
     GlobalConfigurationListener listener = new GlobalConfigurationListener.Adapter() {
       @Override
-      public void changed(List<SonarQubeServer> serverList) {
+      public void changed(List<ServerConnection> serverList) {
         servers.addAll(serverList);
       }
     };
@@ -55,20 +55,20 @@ public class GlobalConfigurationListenerTest extends AbstractSonarLintMockedTest
 
   @Test
   public void testApplied() {
-    List<SonarQubeServer> servers = new LinkedList<>();
+    List<ServerConnection> servers = new LinkedList<>();
     AtomicBoolean bool = new AtomicBoolean(false);
 
     GlobalConfigurationListener listener = new GlobalConfigurationListener.Adapter() {
       @Override
       public void applied(SonarLintGlobalSettings settings) {
-        servers.addAll(settings.getSonarQubeServers());
+        servers.addAll(settings.getServerConnections());
         bool.set(settings.isAutoTrigger());
       }
     };
 
     project.getMessageBus().connect().subscribe(GlobalConfigurationListener.TOPIC, listener);
     SonarLintGlobalSettings settings = new SonarLintGlobalSettings();
-    settings.setSonarQubeServers(testList);
+    settings.setServerConnections(testList);
     settings.setAutoTrigger(true);
     project.getMessageBus().syncPublisher(GlobalConfigurationListener.TOPIC).applied(settings);
 

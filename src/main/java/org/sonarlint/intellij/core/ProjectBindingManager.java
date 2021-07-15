@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,18 +19,30 @@
  */
 package org.sonarlint.intellij.core;
 
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.serviceContainer.NonInjectable;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
+import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
-import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.jetbrains.annotations.NotNull;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.exception.InvalidBindingException;
-import org.sonarlint.intellij.ui.SonarLintConsole;
+import org.sonarlint.intellij.messages.ProjectConfigurationListener;
+import org.sonarlint.intellij.messages.ProjectEngineListener;
+import org.sonarlint.intellij.tasks.BindingStorageUpdateTask;
 import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarsource.sonarlint.core.client.api.common.SonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
+
+import static java.util.Objects.requireNonNull;
+import static org.sonarlint.intellij.config.Settings.getGlobalSettings;
+import static org.sonarlint.intellij.config.Settings.getSettingsFor;
 
 public class ProjectBindingManager {
   private final Project myProject;
@@ -40,11 +52,7 @@ public class ProjectBindingManager {
     this(project, () -> SonarLintUtils.getService(SonarLintEngineManager.class));
   }
 
-  /**
-   * TODO Replace @Deprecated with @NonInjectable when switching to 2019.3 API level
-   * @deprecated in 4.2 to silence a check in 2019.3
-   */
-  @Deprecated
+  @NonInjectable
   ProjectBindingManager(Project project, Supplier<SonarLintEngineManager> engineManagerSupplier) {
     this.myProject = project;
     this.engineManagerSupplier = engineManagerSupplier;
@@ -56,66 +64,117 @@ public class ProjectBindingManager {
    *
    * @throws InvalidBindingException If current project binding is invalid
    */
-  public synchronized SonarLintFacade getFacade() throws InvalidBindingException {
+  public SonarLintFacade getFacade() throws InvalidBindingException {
     return getFacade(false);
   }
 
-  public synchronized SonarLintFacade getFacade(boolean logDetails) throws InvalidBindingException {
+  public SonarLintFacade getFacade(boolean logDetails) throws InvalidBindingException {
     SonarLintEngineManager engineManager = this.engineManagerSupplier.get();
-    SonarLintProjectSettings projectSettings = SonarLintUtils.getService(myProject, SonarLintProjectSettings.class);
+    SonarLintProjectSettings projectSettings = getSettingsFor(myProject);
     SonarLintProjectNotifications notifications = SonarLintUtils.getService(myProject, SonarLintProjectNotifications.class);
     SonarLintConsole console = SonarLintUtils.getService(myProject, SonarLintConsole.class);
     if (projectSettings.isBindingEnabled()) {
-      String serverId = projectSettings.getServerId();
+      String connectionId = projectSettings.getConnectionName();
       String projectKey = projectSettings.getProjectKey();
-      checkBindingStatus(notifications, serverId, projectKey);
+      checkBindingStatus(notifications, connectionId, projectKey);
       if (logDetails) {
-        console.info(String.format("Using configuration of '%s' in server '%s'", projectKey, serverId));
+        console.info(String.format("Using connection '%s' for project '%s'", connectionId, projectKey));
       }
-      ConnectedSonarLintEngine engine = engineManager.getConnectedEngine(notifications, serverId, projectKey);
+      ConnectedSonarLintEngine engine = engineManager.getConnectedEngine(notifications, connectionId, projectKey);
       return new ConnectedSonarLintFacade(engine, myProject);
     }
 
     return new StandaloneSonarLintFacade(myProject, engineManager.getStandaloneEngine());
   }
 
-  public synchronized ConnectedSonarLintEngine getConnectedEngineSkipChecks() {
+  private ConnectedSonarLintEngine getConnectedEngineSkipChecks() {
     SonarLintEngineManager engineManager = this.engineManagerSupplier.get();
-    SonarLintProjectSettings projectSettings = SonarLintUtils.getService(myProject, SonarLintProjectSettings.class);
-    return engineManager.getConnectedEngine(projectSettings.getServerId());
+    return engineManager.getConnectedEngine(getSettingsFor(myProject).getConnectionName());
   }
 
-  public synchronized ConnectedSonarLintEngine getConnectedEngine() throws InvalidBindingException {
-    SonarLintProjectSettings projectSettings = SonarLintUtils.getService(myProject, SonarLintProjectSettings.class);
+  public ConnectedSonarLintEngine getConnectedEngine() throws InvalidBindingException {
+    SonarLintProjectSettings projectSettings = getSettingsFor(myProject);
     if (!projectSettings.isBindingEnabled()) {
       throw new IllegalStateException("Project is not bound to a SonarQube project");
     }
     SonarLintProjectNotifications notifications = SonarLintUtils.getService(myProject, SonarLintProjectNotifications.class);
-    String serverId = projectSettings.getServerId();
+    String connectionName = projectSettings.getConnectionName();
     String projectKey = projectSettings.getProjectKey();
-    checkBindingStatus(notifications, serverId, projectKey);
+    checkBindingStatus(notifications, connectionName, projectKey);
 
     SonarLintEngineManager engineManager = this.engineManagerSupplier.get();
-    return engineManager.getConnectedEngine(notifications, serverId, projectKey);
+    return engineManager.getConnectedEngine(notifications, connectionName, projectKey);
   }
 
-  public synchronized SonarQubeServer getSonarQubeServer() throws InvalidBindingException {
-    SonarLintProjectSettings projectSettings = SonarLintUtils.getService(myProject, SonarLintProjectSettings.class);
-    String serverId = projectSettings.getServerId();
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
-    List<SonarQubeServer> servers = globalSettings.getSonarQubeServers();
-
-    Optional<SonarQubeServer> server = servers.stream().filter(s -> s.getName().equals(serverId)).findAny();
-    return server.orElseThrow(() -> new InvalidBindingException("SonarQube server configuration does not exist for server id: " + serverId));
+  @CheckForNull
+  public SonarLintEngine getEngineIfStarted() {
+    SonarLintEngineManager engineManager = this.engineManagerSupplier.get();
+    SonarLintProjectSettings projectSettings = getSettingsFor(myProject);
+    if (projectSettings.isBound()) {
+      String connectionId = projectSettings.getConnectionName();
+      return engineManager.getConnectedEngineIfStarted(requireNonNull(connectionId));
+    }
+    return engineManager.getStandaloneEngineIfStarted();
   }
 
-  private static void checkBindingStatus(SonarLintProjectNotifications notifications, @Nullable String serverId, @Nullable String projectKey) throws InvalidBindingException {
-    if (serverId == null) {
-      notifications.notifyServerIdInvalid();
+  public boolean isBindingValid() {
+    return getSettingsFor(myProject).isBound() && tryGetServerConnection().isPresent();
+  }
+
+  public @Nullable ConnectedSonarLintEngine getValidConnectedEngine() {
+    return isBindingValid() ? getConnectedEngineSkipChecks() : null;
+  }
+
+  public ServerConnection getServerConnection() throws InvalidBindingException {
+    return tryGetServerConnection().orElseThrow(
+      () -> new InvalidBindingException("Unable to find a connection with name: " + getSettingsFor(myProject).getConnectionName()));
+  }
+
+  public Optional<ServerConnection> tryGetServerConnection() {
+    if (!getSettingsFor(myProject).isBindingEnabled()) {
+      return Optional.empty();
+    }
+    String connectionName = getSettingsFor(myProject).getConnectionName();
+    List<ServerConnection> connections = getGlobalSettings().getServerConnections();
+
+    return connections.stream().filter(s -> s.getName().equals(connectionName)).findAny();
+  }
+
+  private static void checkBindingStatus(SonarLintProjectNotifications notifications, @Nullable String connectionName, @Nullable String projectKey) throws InvalidBindingException {
+    if (connectionName == null) {
+      notifications.notifyConnectionIdInvalid();
       throw new InvalidBindingException("Project has an invalid binding");
     } else if (projectKey == null) {
       notifications.notifyModuleInvalid();
       throw new InvalidBindingException("Project has an invalid binding");
+    }
+  }
+
+  public void bindTo(@NotNull ServerConnection connection, @NotNull String projectKey) {
+    SonarLintEngine previousEngine = getEngineIfStarted();
+    SonarLintProjectSettings projectSettings = getSettingsFor(myProject);
+    projectSettings.bindTo(connection, projectKey);
+    SonarLintProjectNotifications.get(myProject).reset();
+    ConnectedSonarLintEngine newEngine = getConnectedEngineSkipChecks();
+    if (previousEngine != newEngine) {
+      myProject.getMessageBus().syncPublisher(ProjectEngineListener.TOPIC).engineChanged(previousEngine, newEngine);
+    }
+    BindingStorageUpdateTask task = new BindingStorageUpdateTask(newEngine, connection,
+      Collections.singletonMap(projectKey, Collections.singletonList(myProject)), true);
+    ProgressManager.getInstance().run(task.asModal());
+    myProject.getMessageBus().syncPublisher(ProjectConfigurationListener.TOPIC).changed(projectSettings);
+  }
+
+  public void unbind() {
+    SonarLintEngine previousEngine = getEngineIfStarted();
+    SonarLintProjectSettings projectSettings = getSettingsFor(myProject);
+    projectSettings.unbind();
+    SonarLintProjectNotifications.get(myProject).reset();
+    ProjectConfigurationListener projectListener = myProject.getMessageBus().syncPublisher(ProjectConfigurationListener.TOPIC);
+    projectListener.changed(projectSettings);
+    SonarLintEngine standaloneEngine = getEngineIfStarted();
+    if (previousEngine != standaloneEngine) {
+      myProject.getMessageBus().syncPublisher(ProjectEngineListener.TOPIC).engineChanged(previousEngine, standaloneEngine);
     }
   }
 }

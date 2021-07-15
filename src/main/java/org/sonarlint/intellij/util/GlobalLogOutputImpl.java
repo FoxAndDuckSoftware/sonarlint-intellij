@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -23,7 +23,7 @@ import com.intellij.openapi.project.ProjectManager;
 import java.util.Arrays;
 import java.util.stream.Stream;
 import org.jetbrains.annotations.NotNull;
-import org.sonarlint.intellij.ui.SonarLintConsole;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
 
 public class GlobalLogOutputImpl implements GlobalLogOutput {
 

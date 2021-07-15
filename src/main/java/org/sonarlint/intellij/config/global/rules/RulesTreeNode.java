@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -135,8 +135,8 @@ public abstract class RulesTreeNode<T> extends DefaultMutableTreeNode {
       return details.getType();
     }
 
-    public String languageKey() {
-      return details.getLanguageKey();
+    public org.sonarsource.sonarlint.core.client.api.common.Language language() {
+      return details.getLanguage();
     }
 
     @Override

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -28,15 +28,15 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarlint.intellij.issue.IssueManager;
-import org.sonarlint.intellij.ui.SonarLintConsole;
 import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ProjectBinding;
-import org.sonarsource.sonarlint.core.client.api.connected.ServerConfiguration;
 import org.sonarsource.sonarlint.core.client.api.connected.ServerIssue;
+import org.sonarsource.sonarlint.core.serverapi.EndpointParams;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -71,8 +71,8 @@ public class ServerIssueUpdaterTest extends AbstractSonarLintLightTests {
     replaceProjectService(ProjectBindingManager.class, bindingManager);
     doReturn(engine).when(bindingManager).getConnectedEngine();
     underTest = new ServerIssueUpdater(getProject());
-    getGlobalSettings().setSonarQubeServers(Collections.singletonList(SonarQubeServer.newBuilder().setName(SERVER_ID).setHostUrl("http://dummyserver:9000").build()));
-    getProjectSettings().setServerId(SERVER_ID);
+    getGlobalSettings().setServerConnections(Collections.singletonList(ServerConnection.newBuilder().setName(SERVER_ID).setHostUrl("http://dummyserver:9000").build()));
+    getProjectSettings().setConnectionName(SERVER_ID);
     getProjectSettings().setProjectKey(PROJECT_KEY);
 
   }
@@ -92,12 +92,12 @@ public class ServerIssueUpdaterTest extends AbstractSonarLintLightTests {
   }
 
   @Test
-  public void testServerIssueTracking() throws InvalidBindingException {
+  public void testServerIssueTracking() {
     VirtualFile file = myFixture.copyFileToProject(FOO_PHP, FOO_PHP);
     ServerIssue serverIssue = mock(ServerIssue.class);
 
     // mock issues downloaded
-    when(engine.downloadServerIssues(any(ServerConfiguration.class), eq(PROJECT_BINDING), eq(FOO_PHP)))
+    when(engine.downloadServerIssues(any(EndpointParams.class), any(), eq(PROJECT_BINDING), eq(FOO_PHP), eq(true), eq(null)))
       .thenReturn(Collections.singletonList(serverIssue));
 
     // run
@@ -131,7 +131,7 @@ public class ServerIssueUpdaterTest extends AbstractSonarLintLightTests {
     underTest.fetchAndMatchServerIssues(Collections.singletonMap(getModule(), files), new EmptyProgressIndicator(), false);
 
     verify(issueManager, timeout(3000).times(10)).matchWithServerIssues(any(VirtualFile.class), argThat(issues -> issues.size() == 1));
-    verify(engine).downloadServerIssues(any(ServerConfiguration.class), eq(PROJECT_KEY));
+    verify(engine).downloadServerIssues(any(), any(), eq(PROJECT_KEY), eq(true), eq(null));
     verify(mockedConsole, never()).error(anyString());
     verify(mockedConsole, never()).error(anyString(), any(Throwable.class));
   }

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -34,12 +34,12 @@ import com.intellij.tools.SimpleActionGroup;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.components.JBTabbedPane;
 import com.intellij.ui.treeStructure.Tree;
+import com.intellij.util.ui.tree.TreeUtil;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.Collection;
-import java.util.Collections;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import javax.swing.Box;
@@ -50,19 +50,21 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
-import org.sonarlint.intellij.editor.SonarLintHighlighting;
+import javax.swing.tree.TreeSelectionModel;
+import org.sonarlint.intellij.editor.EditorDecorator;
 import org.sonarlint.intellij.issue.LiveIssue;
 import org.sonarlint.intellij.ui.nodes.AbstractNode;
 import org.sonarlint.intellij.ui.nodes.IssueNode;
-import org.sonarlint.intellij.ui.nodes.LocationNode;
 import org.sonarlint.intellij.ui.tree.FlowsTree;
 import org.sonarlint.intellij.ui.tree.FlowsTreeModelBuilder;
 import org.sonarlint.intellij.ui.tree.IssueTree;
 import org.sonarlint.intellij.ui.tree.IssueTreeModelBuilder;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
-abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements OccurenceNavigator {
+public abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements OccurenceNavigator {
   private static final String ID = "SonarLint";
+  private static final int RULE_TAB_INDEX = 0;
+  private static final int LOCATIONS_TAB_INDEX = 1;
   protected final Project project;
   protected SonarLintRulePanel rulePanel;
   protected JBTabbedPane detailsTab;
@@ -72,7 +74,7 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
   protected FlowsTreeModelBuilder flowsTreeBuilder;
   private ActionToolbar mainToolbar;
 
-  AbstractIssuesPanel(Project project) {
+  protected AbstractIssuesPanel(Project project) {
     super(false, true);
     this.project = project;
 
@@ -99,8 +101,8 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
     scrollableRulePanel.getVerticalScrollBar().setUnitIncrement(10);
 
     detailsTab = new JBTabbedPane();
-    detailsTab.insertTab("Rule", null, scrollableRulePanel, "Details about the rule", 0);
-    detailsTab.insertTab("Locations", null, flowsPanel, "All locations involved in the issue", 1);
+    detailsTab.insertTab("Rule", null, scrollableRulePanel, "Details about the rule", RULE_TAB_INDEX);
+    detailsTab.insertTab("Locations", null, flowsPanel, "All locations involved in the issue", LOCATIONS_TAB_INDEX);
   }
 
   protected JComponent createSplitter(JComponent c1, JComponent c2, String proportionProperty, boolean vertical, float defaultSplit) {
@@ -117,33 +119,21 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
     return splitter;
   }
 
-  protected void flowsTreeSelectionChanged() {
-    LocationNode[] selectedNodes = flowsTree.getSelectedNodes(LocationNode.class, null);
-    if (selectedNodes.length > 0) {
-      LocationNode node = selectedNodes[0];
-      SonarLintHighlighting highlighting = SonarLintUtils.getService(project, SonarLintHighlighting.class);
-      highlighting.highlightFlowsWithHighlightersUtil(node.rangeMarker(), node.message(), Collections.emptyList());
-    }
-  }
-
   protected void issueTreeSelectionChanged() {
     IssueNode[] selectedNodes = tree.getSelectedNodes(IssueNode.class, null);
     if (selectedNodes.length > 0) {
       LiveIssue issue = selectedNodes[0].issue();
-      rulePanel.setRuleKey(issue);
-      if (issue.getRange() != null) {
-        SonarLintHighlighting highlighting = SonarLintUtils.getService(project, SonarLintHighlighting.class);
-        highlighting.highlightFlowsWithHighlightersUtil(issue.getRange(), issue.getMessage(), issue.flows());
-      }
+      rulePanel.setRuleKey(issue.getRuleKey());
+      SonarLintUtils.getService(project, EditorDecorator.class).highlightIssue(issue);
       flowsTree.getEmptyText().setText("Selected issue doesn't have flows");
-      flowsTreeBuilder.setFlows(issue.flows(), issue.getRange(), issue.getMessage());
+      flowsTreeBuilder.populateForIssue(issue);
       flowsTree.expandAll();
     } else {
       flowsTreeBuilder.clearFlows();
       flowsTree.getEmptyText().setText("No issue selected");
       rulePanel.setRuleKey(null);
-      SonarLintHighlighting highlighting = SonarLintUtils.getService(project, SonarLintHighlighting.class);
-      highlighting.removeHighlightingFlows();
+      EditorDecorator highlighting = SonarLintUtils.getService(project, EditorDecorator.class);
+      highlighting.removeHighlights();
     }
   }
 
@@ -177,7 +167,6 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
     flowsTree = new FlowsTree(project, model);
     flowsTreeBuilder.clearFlows();
     flowsTree.getEmptyText().setText("No issue selected");
-    flowsTree.addTreeSelectionListener(e -> flowsTreeSelectionChanged());
   }
 
   private void createIssuesTree() {
@@ -189,8 +178,8 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
       @Override
       public void keyPressed(KeyEvent e) {
         if (KeyEvent.VK_ESCAPE == e.getKeyCode()) {
-          SonarLintHighlighting highlighting = SonarLintUtils.getService(project, SonarLintHighlighting.class);
-          highlighting.removeHighlightingFlows();
+          EditorDecorator highlighting = SonarLintUtils.getService(project, EditorDecorator.class);
+          highlighting.removeHighlights();
         }
       }
     });
@@ -201,6 +190,7 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
         }
       }
     });
+    tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
   }
 
   @CheckForNull
@@ -256,7 +246,7 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
     if (path == null) {
       return null;
     }
-    return occurrence(treeBuilder.getNextIssue((AbstractNode<?>) path.getLastPathComponent()));
+    return occurrence(treeBuilder.getNextIssue((AbstractNode) path.getLastPathComponent()));
   }
 
   @CheckForNull
@@ -266,7 +256,7 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
     if (path == null) {
       return null;
     }
-    return occurrence(treeBuilder.getPreviousIssue((AbstractNode<?>) path.getLastPathComponent()));
+    return occurrence(treeBuilder.getPreviousIssue((AbstractNode) path.getLastPathComponent()));
   }
 
   @Override public String getNextOccurenceActionName() {
@@ -276,4 +266,23 @@ abstract class AbstractIssuesPanel extends SimpleToolWindowPanel implements Occu
   @Override public String getPreviousOccurenceActionName() {
     return "Previous Issue";
   }
+
+  public void setSelectedIssue(LiveIssue issue) {
+    DefaultMutableTreeNode issueNode = TreeUtil.findNode(((DefaultMutableTreeNode) tree.getModel().getRoot()),
+      (node) -> node instanceof IssueNode && ((IssueNode) node).issue().equals(issue));
+    if(issueNode == null) {
+      return;
+    }
+    tree.setSelectionPath(null);
+    tree.addSelectionPath(new TreePath(issueNode.getPath()));
+  }
+
+  public void selectLocationsTab() {
+    detailsTab.setSelectedIndex(LOCATIONS_TAB_INDEX);
+  }
+
+  public void selectRulesTab() {
+    detailsTab.setSelectedIndex(RULE_TAB_INDEX);
+  }
+
 }

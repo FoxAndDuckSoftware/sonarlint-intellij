@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -27,7 +27,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
 import org.sonarlint.intellij.analysis.AnalysisCallback;
-import org.sonarlint.intellij.analysis.SonarLintStatus;
+import org.sonarlint.intellij.analysis.AnalysisStatus;
 import org.sonarlint.intellij.trigger.SonarLintSubmitter;
 import org.sonarlint.intellij.trigger.TriggerType;
 
@@ -43,13 +43,13 @@ public class SonarAnalyzeAllFilesActionTest extends AbstractSonarLintLightTests 
   private AnActionEvent event = mock(AnActionEvent.class);
 
   private SonarAnalyzeAllFilesAction action = new SonarAnalyzeAllFilesAction();
-  private SonarLintStatus status;
+  private AnalysisStatus status;
   private VirtualFile file;
 
   @Before
   public void before() {
     replaceProjectService(SonarLintSubmitter.class, submitter);
-    status = SonarLintStatus.get(getProject());
+    status = AnalysisStatus.get(getProject());
     file = myFixture.copyFileToProject("foo/foo.php", "foo/foo.php");
   }
 
@@ -78,7 +78,7 @@ public class SonarAnalyzeAllFilesActionTest extends AbstractSonarLintLightTests 
     Messages.setTestDialog(x -> Messages.OK);
     action.actionPerformed(event);
 
-    verify(submitter).submitFiles(eq(Collections.singletonList(file)), eq(TriggerType.ALL), any(AnalysisCallback.class), eq(false));
+    verify(submitter).submitFiles(eq(Collections.singleton(file)), eq(TriggerType.ALL), any(AnalysisCallback.class), eq(false));
   }
 
 }

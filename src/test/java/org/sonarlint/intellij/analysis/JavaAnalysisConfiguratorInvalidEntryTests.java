@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -25,10 +25,12 @@ import com.intellij.openapi.roots.ContentEntry;
 import com.intellij.openapi.roots.ModifiableRootModel;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
+import java.util.Collections;
 import java.util.Map;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
+import org.sonarlint.intellij.java.JavaAnalysisConfigurator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,7 +58,7 @@ public class JavaAnalysisConfiguratorInvalidEntryTests extends AbstractSonarLint
 
   @Test
   public void testClasspathIgnoreInvalidJdkEntries() {
-    final Map<String, String> props = underTest.configure(getModule());
+    final Map<String, String> props = underTest.configure(getModule(), Collections.emptyList()).extraProperties;
     assertThat(props).containsOnlyKeys("sonar.java.source", "sonar.java.target");
   }
 

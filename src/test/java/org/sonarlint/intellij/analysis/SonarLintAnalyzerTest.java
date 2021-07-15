@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,9 +19,8 @@
  */
 package org.sonarlint.intellij.analysis;
 
-import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.module.Module;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
 import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,8 +28,6 @@ import org.sonarlint.intellij.AbstractSonarLintLightTests;
 import org.sonarlint.intellij.core.ProjectBindingManager;
 import org.sonarlint.intellij.core.SonarLintFacade;
 import org.sonarlint.intellij.exception.InvalidBindingException;
-import org.sonarlint.intellij.telemetry.SonarLintTelemetryImpl;
-import org.sonarlint.intellij.ui.SonarLintConsole;
 import org.sonarsource.sonarlint.core.client.api.common.ProgressMonitor;
 import org.sonarsource.sonarlint.core.client.api.common.analysis.IssueListener;
 import org.sonarsource.sonarlint.core.container.model.DefaultAnalysisResult;
@@ -54,7 +51,7 @@ public class SonarLintAnalyzerTest extends AbstractSonarLintLightTests {
     replaceProjectService(ProjectBindingManager.class, projectBindingManager);
     analyzer = new SonarLintAnalyzer(getProject());
     when(projectBindingManager.getFacade(true)).thenReturn(facade);
-    when(facade.startAnalysis(anyList(), any(IssueListener.class), anyMap(), any(ProgressMonitor.class))).thenReturn(new DefaultAnalysisResult());
+    when(facade.startAnalysis(any(Module.class), anyList(), any(IssueListener.class), anyMap(), any(ProgressMonitor.class))).thenReturn(new DefaultAnalysisResult());
   }
 
   @Test
@@ -64,6 +61,6 @@ public class SonarLintAnalyzerTest extends AbstractSonarLintLightTests {
 
     analyzer.analyzeModule(getModule(), Collections.singleton(file), listener, mock(ProgressMonitor.class));
 
-    verify(facade).startAnalysis(anyList(), eq(listener), anyMap(), any(ProgressMonitor.class));
+    verify(facade).startAnalysis(eq(getModule()), anyList(), eq(listener), anyMap(), any(ProgressMonitor.class));
   }
 }

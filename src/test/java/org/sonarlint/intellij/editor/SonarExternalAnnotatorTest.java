@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -29,7 +29,6 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedList;
 import org.junit.Before;
 import org.junit.Test;
@@ -91,6 +90,7 @@ public class SonarExternalAnnotatorTest extends AbstractSonarLintLightTests {
 
   @Test
   public void testFileLevelIssues() {
+    when(psiFile.isValid()).thenReturn(true);
     createFileIssues(5);
     annotator.apply(psiFile, ctx, holder);
 
@@ -127,7 +127,7 @@ public class SonarExternalAnnotatorTest extends AbstractSonarLintLightTests {
 
   private static LiveIssue createFileStoredIssue(int id, PsiFile file) {
     Issue issue = SonarLintTestUtils.createIssue(id);
-    return new LiveIssue(issue, file, null, Collections.emptyList());
+    return new LiveIssue(issue, file, null, null);
   }
 
   private LiveIssue createRangeStoredIssue(int id, int rangeStart, int rangeEnd, String text) {
@@ -139,6 +139,6 @@ public class SonarExternalAnnotatorTest extends AbstractSonarLintLightTests {
     when(range.isValid()).thenReturn(true);
     when(range.getDocument()).thenReturn(document);
     when(document.getText(any(TextRange.class))).thenReturn(text);
-    return new LiveIssue(issue, mock(PsiFile.class), range, Collections.emptyList());
+    return new LiveIssue(issue, mock(PsiFile.class), range, null);
   }
 }

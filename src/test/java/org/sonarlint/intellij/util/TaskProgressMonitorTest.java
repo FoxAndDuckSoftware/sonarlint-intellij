@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,21 +20,23 @@
 package org.sonarlint.intellij.util;
 
 import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.Project;
 import org.junit.Test;
 
+import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class TaskProgressMonitorTest {
   private ProgressIndicator wrapped = mock(ProgressIndicator.class);
-  private TaskProgressMonitor monitor = new TaskProgressMonitor(wrapped);
+  private ProgressManager progressManager = mock(ProgressManager.class);
+  private TaskProgressMonitor monitor = new TaskProgressMonitor(wrapped, progressManager, null, () -> false);
 
   @Test
   public void should_wrap() {
-    monitor.finishNonCancelableSection();
-    verify(wrapped).finishNonCancelableSection();
-
-    monitor.isCanceled();
+    assertThat(monitor.isCanceled()).isFalse();
     verify(wrapped).isCanceled();
 
     monitor.setFraction(0.5f);
@@ -46,7 +48,28 @@ public class TaskProgressMonitorTest {
     monitor.setMessage("message");
     verify(wrapped).setText("message");
 
-    monitor.startNonCancelableSection();
-    verify(wrapped).startNonCancelableSection();
+    Runnable mockRunnable = mock(Runnable.class);
+    monitor.executeNonCancelableSection(mockRunnable);
+    verify(progressManager).executeNonCancelableSection(mockRunnable);
+  }
+
+  @Test
+  public void cancel_if_project_disposed() {
+    Project project = mock(Project.class);
+    TaskProgressMonitor monitor = new TaskProgressMonitor(wrapped, progressManager, project, () -> false);
+
+    when(project.isDisposed()).thenReturn(false);
+    assertThat(monitor.isCanceled()).isFalse();
+
+    when(project.isDisposed()).thenReturn(true);
+    assertThat(monitor.isCanceled()).isTrue();
+  }
+
+  @Test
+  public void cancel_if_flag_set() {
+    Project project = mock(Project.class);
+    TaskProgressMonitor monitor = new TaskProgressMonitor(wrapped, progressManager, null, () -> true);
+
+    assertThat(monitor.isCanceled()).isTrue();
   }
 }

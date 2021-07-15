@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -26,7 +26,11 @@ import java.awt.BorderLayout;
 import java.util.List;
 import javax.swing.JPanel;
 import org.apache.commons.lang.StringUtils;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.config.global.ServerConnection;
+import org.sonarlint.intellij.core.ProjectBindingManager;
+
+import static java.util.Optional.ofNullable;
+import static org.sonarlint.intellij.util.SonarLintUtils.getService;
 
 public class SonarLintProjectSettingsPanel implements Disposable {
   private final SonarLintProjectPropertiesPanel propsPanel;
@@ -60,23 +64,23 @@ public class SonarLintProjectSettingsPanel implements Disposable {
     return root;
   }
 
-  public void load(List<SonarQubeServer> servers, SonarLintProjectSettings projectSettings) {
+  public void load(List<ServerConnection> servers, SonarLintProjectSettings projectSettings) {
     propsPanel.setAnalysisProperties(projectSettings.getAdditionalProperties());
-    bindPanel.load(servers, projectSettings.isBindingEnabled(), projectSettings.getServerId(), projectSettings.getProjectKey());
+    bindPanel.load(servers, projectSettings.isBindingEnabled(), projectSettings.getConnectionName(), projectSettings.getProjectKey());
     exclusionsPanel.load(projectSettings);
   }
 
-  public void save(SonarLintProjectSettings projectSettings) {
+  public void save(Project project, SonarLintProjectSettings projectSettings) {
     projectSettings.setAdditionalProperties(propsPanel.getProperties());
-    projectSettings.setBindingEnabled(bindPanel.isBindingEnabled());
     exclusionsPanel.save(projectSettings);
 
-    if (bindPanel.isBindingEnabled()) {
-      projectSettings.setServerId(bindPanel.getSelectedStorageId());
-      projectSettings.setProjectKey(bindPanel.getSelectedProjectKey());
+    ProjectBindingManager bindingManager = getService(project, ProjectBindingManager.class);
+    ServerConnection connection = bindPanel.getSelectedConnection();
+    String projectKey = bindPanel.getSelectedProjectKey();
+    if (bindPanel.isBindingEnabled() && connection != null && projectKey != null) {
+      bindingManager.bindTo(connection, projectKey);
     } else {
-      projectSettings.setServerId(null);
-      projectSettings.setProjectKey(null);
+      bindingManager.unbind();
     }
   }
 
@@ -86,7 +90,7 @@ public class SonarLintProjectSettingsPanel implements Disposable {
     }
 
     if (bindPanel.isBindingEnabled()) {
-      if (!StringUtils.equals(projectSettings.getServerId(), bindPanel.getSelectedStorageId())) {
+      if (!StringUtils.equals(projectSettings.getConnectionName(), ofNullable(bindPanel.getSelectedConnection()).map(ServerConnection::getName).orElse(null))) {
         return true;
       }
 
@@ -119,9 +123,9 @@ public class SonarLintProjectSettingsPanel implements Disposable {
     }
   }
 
-  public void serversChanged(List<SonarQubeServer> serverList) {
+  public void serversChanged(List<ServerConnection> serverList) {
     if (bindPanel != null) {
-      bindPanel.serversChanged(serverList);
+      bindPanel.connectionsChanged(serverList);
     }
   }
 }

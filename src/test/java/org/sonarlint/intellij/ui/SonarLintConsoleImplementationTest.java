@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -21,14 +21,15 @@ package org.sonarlint.intellij.ui;
 
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.execution.ui.ConsoleViewContentType;
-import com.intellij.openapi.project.Project;
 import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 public class SonarLintConsoleImplementationTest extends AbstractSonarLintLightTests {
   private ConsoleView consoleView = mock(ConsoleView.class);
@@ -36,7 +37,6 @@ public class SonarLintConsoleImplementationTest extends AbstractSonarLintLightTe
 
   @Before
   public void prepare() {
-    replaceProjectService(SonarLintProjectSettings.class, getProjectSettings());
     console = new SonarLintConsoleImpl(getProject(), consoleView);
   }
 

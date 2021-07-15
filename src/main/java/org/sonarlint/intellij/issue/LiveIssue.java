@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,27 +19,24 @@
  */
 package org.sonarlint.intellij.issue;
 
-import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.RangeMarker;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiFile;
-import java.security.MessageDigest;
-import java.util.Collections;
-import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.sonarlint.intellij.issue.tracking.Trackable;
 import org.sonarsource.sonarlint.core.client.api.common.analysis.Issue;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.commons.codec.digest.DigestUtils.md5;
 
 public class LiveIssue implements Trackable {
   private static final AtomicLong UID_GEN = new AtomicLong();
-  private static final MessageDigest MD5_DIGEST = DigestUtils.getMd5Digest();
 
   private final long uid;
   private final RangeMarker range;
@@ -49,7 +46,7 @@ public class LiveIssue implements Trackable {
   private final String ruleName;
   private final String message;
   private final String ruleKey;
-  private final List<Flow> flows;
+  private final IssueContext context;
 
   // tracked fields (mutable)
   private String severity;
@@ -60,10 +57,10 @@ public class LiveIssue implements Trackable {
   private String assignee;
 
   public LiveIssue(Issue issue, PsiFile psiFile) {
-    this(issue, psiFile, null, Collections.emptyList());
+    this(issue, psiFile, null, null);
   }
 
-  public LiveIssue(Issue issue, PsiFile psiFile, @Nullable RangeMarker range, List<Flow> flows) {
+  public LiveIssue(Issue issue, PsiFile psiFile, @Nullable RangeMarker range, @Nullable IssueContext context) {
     this.range = range;
     this.message = issue.getMessage();
     this.ruleKey = issue.getRuleKey();
@@ -73,7 +70,7 @@ public class LiveIssue implements Trackable {
     this.psiFile = psiFile;
     this.assignee = "";
     this.uid = UID_GEN.getAndIncrement();
-    this.flows = flows;
+    this.context = context;
 
     if (range != null) {
       Document document = range.getDocument();
@@ -90,7 +87,7 @@ public class LiveIssue implements Trackable {
   }
 
   private static int checksum(String content) {
-    return Hex.encodeHexString(MD5_DIGEST.digest(content.replaceAll("[\\s]", "").getBytes(UTF_8))).hashCode();
+    return Hex.encodeHexString(md5(content.replaceAll("[\\s]", "").getBytes(UTF_8))).hashCode();
   }
 
   public boolean isValid() {
@@ -103,10 +100,8 @@ public class LiveIssue implements Trackable {
 
   @Override
   public Integer getLine() {
-    if (range != null && isValid()) {
-      return ApplicationManager.getApplication().<Integer>runReadAction(() -> {
-        return range.getDocument().getLineNumber(range.getStartOffset()) + 1;
-      });
+    if (range != null) {
+      return ReadAction.compute(() -> isValid() ? range.getDocument().getLineNumber(range.getStartOffset()) + 1 : null);
     }
 
     return null;
@@ -204,38 +199,7 @@ public class LiveIssue implements Trackable {
     this.type = type;
   }
 
-  public List<Flow> flows() {
-    return flows;
-  }
-
-  public static class Flow {
-    private final List<IssueLocation> locations;
-
-    public Flow(List<IssueLocation> locations) {
-      this.locations = locations;
-    }
-
-    public List<IssueLocation> locations() {
-      return locations;
-    }
-  }
-
-  public static class IssueLocation {
-    private final RangeMarker location;
-    private final String message;
-
-    public IssueLocation(RangeMarker location, @Nullable String message) {
-      this.location = location;
-      this.message = message;
-    }
-
-    @CheckForNull
-    public String message() {
-      return message;
-    }
-
-    public RangeMarker location() {
-      return location;
-    }
+  public Optional<IssueContext> context() {
+    return Optional.ofNullable(context);
   }
 }

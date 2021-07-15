@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -24,10 +24,13 @@ import com.intellij.concurrency.JobScheduler;
 import com.intellij.ide.AppLifecycleListener;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.serviceContainer.NonInjectable;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.sonarlint.intellij.util.GlobalLogOutput;
+import org.sonarsource.sonarlint.core.client.api.common.Language;
 import org.sonarsource.sonarlint.core.telemetry.TelemetryManager;
 
 public class SonarLintTelemetryImpl implements SonarLintTelemetry, AppLifecycleListener {
@@ -43,11 +46,7 @@ public class SonarLintTelemetryImpl implements SonarLintTelemetry, AppLifecycleL
     this(new TelemetryManagerProvider());
   }
 
-  /**
-   * TODO Replace @Deprecated with @NonInjectable when switching to 2019.3 API level
-   * @deprecated in 4.2 to silence a check in 2019.3
-   */
-  @Deprecated
+  @NonInjectable
   SonarLintTelemetryImpl(TelemetryManagerProvider telemetryManagerProvider) {
     if ("true".equals(System.getProperty(DISABLE_PROPERTY_KEY))) {
       // can't log with GlobalLogOutput to the tool window since at this point no project is open yet
@@ -113,9 +112,51 @@ public class SonarLintTelemetryImpl implements SonarLintTelemetry, AppLifecycleL
   }
 
   @Override
-  public void analysisDoneOnSingleFile(@Nullable String language, int time) {
+  public void analysisDoneOnSingleLanguage(@Nullable Language language, int time) {
     if (enabled()) {
       telemetry.analysisDoneOnSingleLanguage(language, time);
+    }
+  }
+
+  @Override
+  public void devNotificationsReceived(String eventType) {
+    if (enabled()) {
+      telemetry.devNotificationsReceived(eventType);
+    }
+  }
+
+  @Override
+  public void devNotificationsClicked(String eventType) {
+    if (enabled()) {
+      telemetry.devNotificationsClicked(eventType);
+    }
+  }
+
+  @Override
+  public void showHotspotRequestReceived() {
+    if (enabled()) {
+      telemetry.showHotspotRequestReceived();
+    }
+  }
+
+  @Override
+  public void taintVulnerabilitiesInvestigatedRemotely() {
+    if (enabled()) {
+      telemetry.taintVulnerabilitiesInvestigatedRemotely();
+    }
+  }
+
+  @Override
+  public void taintVulnerabilitiesInvestigatedLocally() {
+    if (enabled()) {
+      telemetry.taintVulnerabilitiesInvestigatedLocally();
+    }
+  }
+
+  @Override
+  public void addReportedRules(Set<String> ruleKeys) {
+    if (enabled()) {
+      telemetry.addReportedRules(ruleKeys);
     }
   }
 

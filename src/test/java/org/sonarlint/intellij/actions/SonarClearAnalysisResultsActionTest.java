@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -22,9 +22,7 @@ package org.sonarlint.intellij.actions;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.AbstractSonarLintMockedTests;
 import org.sonarlint.intellij.issue.IssueStore;
-import org.sonarlint.intellij.proto.Sonarlint;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;

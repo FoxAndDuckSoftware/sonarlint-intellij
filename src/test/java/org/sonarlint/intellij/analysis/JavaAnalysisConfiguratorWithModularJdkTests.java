@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -26,11 +26,13 @@ import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
+import org.sonarlint.intellij.java.JavaAnalysisConfigurator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -52,12 +54,13 @@ public class JavaAnalysisConfiguratorWithModularJdkTests extends AbstractSonarLi
 
   @Test
   public void testAddJrtFsToClasspath() {
-    final Map<String, String> props = underTest.configure(getModule());
+    final Map<String, String> props = underTest.configure(getModule(), Collections.emptyList()).extraProperties;
     assertThat(props).containsKeys("sonar.java.libraries", "sonar.java.test.libraries");
     assertThat(Stream.of(props.get("sonar.java.libraries").split(",")).map(Paths::get))
       .containsExactly(FAKE_JDK_ROOT_PATH.resolve("jdk9/lib/jrt-fs.jar"));
     assertThat(Stream.of(props.get("sonar.java.test.libraries").split(",")).map(Paths::get))
       .containsExactly(FAKE_JDK_ROOT_PATH.resolve("jdk9/lib/jrt-fs.jar"));
+    assertThat(Paths.get(props.get("sonar.java.jdkHome"))).isEqualTo(FAKE_JDK_ROOT_PATH.resolve("jdk9"));
   }
 
   private static Sdk addJrtFsJarTo(@NotNull Sdk jdk) {

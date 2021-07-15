@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -25,23 +25,21 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import java.util.Map;
 import org.jetbrains.annotations.NotNull;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
-import org.sonarlint.intellij.util.SonarLintUtils;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.util.TaskProgressMonitor;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
-import org.sonarsource.sonarlint.core.client.api.connected.RemoteProject;
-import org.sonarsource.sonarlint.core.client.api.connected.ServerConfiguration;
+import org.sonarsource.sonarlint.core.serverapi.project.ServerProject;
 
 // we can't use Task.WithResult because it was only introduced recently
 public class ServerDownloadProjectTask extends Task.Modal {
   private static final Logger LOGGER = Logger.getInstance(ServerDownloadProjectTask.class);
   private final ConnectedSonarLintEngine engine;
-  private final SonarQubeServer server;
+  private final ServerConnection server;
 
   private Exception exception;
-  private Map<String, RemoteProject> result;
+  private Map<String, ServerProject> result;
 
-  public ServerDownloadProjectTask(Project project, ConnectedSonarLintEngine engine, SonarQubeServer server) {
+  public ServerDownloadProjectTask(Project project, ConnectedSonarLintEngine engine, ServerConnection server) {
     super(project, "Downloading Project List", true);
     this.engine = engine;
     this.server = server;
@@ -49,16 +47,15 @@ public class ServerDownloadProjectTask extends Task.Modal {
 
   @Override public void run(@NotNull ProgressIndicator indicator) {
     try {
-      TaskProgressMonitor monitor = new TaskProgressMonitor(indicator);
-      ServerConfiguration serverConfiguration = SonarLintUtils.getServerConfiguration(server);
-      this.result = engine.downloadAllProjects(serverConfiguration, monitor);
+      TaskProgressMonitor monitor = new TaskProgressMonitor(indicator, myProject);
+      this.result = engine.downloadAllProjects(server.getEndpointParams(), server.getHttpClient(), monitor);
     } catch (Exception e) {
       LOGGER.info("Failed to download list of projects", e);
       this.exception = e;
     }
   }
 
-  public Map<String, RemoteProject> getResult() throws Exception {
+  public Map<String, ServerProject> getResult() throws Exception {
     if (exception != null) {
       throw exception;
     }

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -92,14 +92,14 @@ public class IssueTree extends Tree implements DataProvider {
       return getSelectedFile();
     } else if (PlatformDataKeys.PSI_FILE.is(dataId)) {
       VirtualFile file = getSelectedFile();
-      if (file != null) {
+      if (file != null && file.isValid()) {
         return PsiManager.getInstance(project).findFile(file);
       }
       return null;
     } else if (PlatformDataKeys.VIRTUAL_FILE_ARRAY.is(dataId)) {
       VirtualFile f = getSelectedFile();
       // return empty so that it doesn't find it in parent components
-      return f != null ? (new VirtualFile[] {f}) : new VirtualFile[0];
+      return f != null && f.isValid() ? (new VirtualFile[] {f}) : new VirtualFile[0];
     } else if (DisableRuleAction.ISSUE_DATA_KEY.is(dataId)) {
       return getSelectedIssue();
     }

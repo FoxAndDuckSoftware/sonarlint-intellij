@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -21,18 +21,19 @@ package org.sonarlint.intellij.actions;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.project.Project;
-import org.sonarlint.intellij.analysis.SonarLintStatus;
+import org.sonarlint.intellij.analysis.AnalysisStatus;
 import org.sonarlint.intellij.ui.CodeAnalyzersDialog;
 
 public class SonarShowCodeAnalyzers extends AbstractSonarAction {
 
-  @Override protected boolean isEnabled(AnActionEvent e, Project project, SonarLintStatus status) {
+  @Override protected boolean isEnabled(AnActionEvent e, Project project, AnalysisStatus status) {
     return e.getProject() != null;
   }
 
   @Override public void actionPerformed(AnActionEvent e) {
-    if (e.getProject() != null) {
-      new CodeAnalyzersDialog(e.getProject()).showAndGet();
+    Project project = e.getProject();
+    if (project != null) {
+      new CodeAnalyzersDialog(project).showAndGet();
     }
   }
 }

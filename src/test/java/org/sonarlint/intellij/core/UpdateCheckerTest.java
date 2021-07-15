@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -24,10 +24,9 @@ import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
-import org.sonarsource.sonarlint.core.client.api.connected.ServerConfiguration;
 import org.sonarsource.sonarlint.core.client.api.connected.StorageUpdateCheckResult;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -40,7 +39,7 @@ import static org.mockito.Mockito.when;
 
 public class UpdateCheckerTest extends AbstractSonarLintLightTests {
   private UpdateChecker updateChecker;
-  private SonarQubeServer server;
+  private ServerConnection server;
   private SonarLintProjectNotifications notifications = mock(SonarLintProjectNotifications.class);
   private ProjectBindingManager bindingManager = mock(ProjectBindingManager.class);
   private ConnectedSonarLintEngine engine = mock(ConnectedSonarLintEngine.class);
@@ -51,9 +50,9 @@ public class UpdateCheckerTest extends AbstractSonarLintLightTests {
     replaceProjectService(SonarLintProjectNotifications.class, notifications);
 
     getProjectSettings().setProjectKey("key");
-    getProjectSettings().setServerId("serverId");
+    getProjectSettings().setConnectionName("serverId");
     server = createServer();
-    when(bindingManager.getSonarQubeServer()).thenReturn(server);
+    when(bindingManager.getServerConnection()).thenReturn(server);
     when(bindingManager.getConnectedEngine()).thenReturn(engine);
 
     updateChecker = new UpdateChecker(getProject());
@@ -73,13 +72,13 @@ public class UpdateCheckerTest extends AbstractSonarLintLightTests {
     StorageUpdateCheckResult result = mock(StorageUpdateCheckResult.class);
     when(result.needUpdate()).thenReturn(false);
 
-    when(engine.checkIfProjectStorageNeedUpdate(any(ServerConfiguration.class), anyString(), any())).thenReturn(result);
-    when(engine.checkIfGlobalStorageNeedUpdate(any(ServerConfiguration.class), any())).thenReturn(result);
+    when(engine.checkIfProjectStorageNeedUpdate(any(), any(), anyString(), any())).thenReturn(result);
+    when(engine.checkIfGlobalStorageNeedUpdate(any(), any(), any())).thenReturn(result);
 
     updateChecker.checkForUpdate(DumbProgressIndicator.INSTANCE);
 
-    verify(engine).checkIfGlobalStorageNeedUpdate(any(ServerConfiguration.class), any());
-    verify(engine).checkIfProjectStorageNeedUpdate(any(ServerConfiguration.class), anyString(), any());
+    verify(engine).checkIfGlobalStorageNeedUpdate(any(), any(), any());
+    verify(engine).checkIfProjectStorageNeedUpdate(any(), any(), anyString(), any());
 
     verifyZeroInteractions(notifications);
   }
@@ -90,21 +89,21 @@ public class UpdateCheckerTest extends AbstractSonarLintLightTests {
     when(result.needUpdate()).thenReturn(true);
     when(result.changelog()).thenReturn(Collections.singletonList("change1"));
 
-    when(engine.checkIfProjectStorageNeedUpdate(any(ServerConfiguration.class), anyString(), any())).thenReturn(result);
-    when(engine.checkIfGlobalStorageNeedUpdate(any(ServerConfiguration.class), any())).thenReturn(result);
+    when(engine.checkIfProjectStorageNeedUpdate(any(), any(), anyString(), any())).thenReturn(result);
+    when(engine.checkIfGlobalStorageNeedUpdate(any(), any(), any())).thenReturn(result);
 
     updateChecker.checkForUpdate(DumbProgressIndicator.INSTANCE);
 
-    verify(engine).checkIfGlobalStorageNeedUpdate(any(ServerConfiguration.class), any());
-    verify(engine).checkIfProjectStorageNeedUpdate(any(ServerConfiguration.class), anyString(), any());
+    verify(engine).checkIfGlobalStorageNeedUpdate(any(), any(), any());
+    verify(engine).checkIfProjectStorageNeedUpdate(any(), any(), anyString(), any());
     verify(notifications).notifyServerHasUpdates("serverId", engine, server, false);
 
     verifyNoMoreInteractions(engine);
     verifyZeroInteractions(notifications);
   }
 
-  private SonarQubeServer createServer() {
-    return SonarQubeServer.newBuilder()
+  private ServerConnection createServer() {
+    return ServerConnection.newBuilder()
       .setHostUrl("http://localhost:9000")
       .setName("server1")
       .build();

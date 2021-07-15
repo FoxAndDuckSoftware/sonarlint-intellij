@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -77,7 +77,7 @@ public class RulesTreeTableModel extends DefaultTreeModel implements TreeTableMo
     if (column == ICONS_COLUMN) {
       if (node instanceof RulesTreeNode.Rule) {
         RulesTreeNode.Rule rule = (RulesTreeNode.Rule) node;
-        int gap = JBUI.isHiDPI() ? 8 : 4;
+        int gap = JBUI.isUsrHiDPI() ? 8 : 4;
         return new CompoundIcon(CompoundIcon.Axis.X_AXIS, gap, SonarLintIcons.type12(rule.type()), SonarLintIcons.severity12(rule.severity()));
       }
       return null;

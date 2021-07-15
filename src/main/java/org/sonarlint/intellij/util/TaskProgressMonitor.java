@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,13 +20,31 @@
 package org.sonarlint.intellij.util;
 
 import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.project.Project;
+import java.util.function.Supplier;
+import javax.annotation.Nullable;
 import org.sonarsource.sonarlint.core.client.api.common.ProgressMonitor;
 
 public class TaskProgressMonitor extends ProgressMonitor {
   private final ProgressIndicator indicator;
+  private final ProgressManager progressManager;
+  private final Project project;
+  private final Supplier<Boolean> cancelledFlag;
 
-  public TaskProgressMonitor(ProgressIndicator indicator) {
+  public TaskProgressMonitor(ProgressIndicator indicator, @Nullable Project project) {
+    this(indicator, ProgressManager.getInstance(), project, () -> false);
+  }
+
+  public TaskProgressMonitor(ProgressIndicator indicator, @Nullable Project project, Supplier<Boolean> cancelledFlag) {
+    this(indicator, ProgressManager.getInstance(), project, cancelledFlag);
+  }
+
+  public TaskProgressMonitor(ProgressIndicator indicator, ProgressManager progressManager, @Nullable Project project, Supplier<Boolean> cancelledFlag) {
     this.indicator = indicator;
+    this.progressManager = progressManager;
+    this.project = project;
+    this.cancelledFlag = cancelledFlag;
   }
 
   /**
@@ -34,7 +52,7 @@ public class TaskProgressMonitor extends ProgressMonitor {
    */
   @Override
   public boolean isCanceled() {
-    return indicator.isCanceled();
+    return cancelledFlag.get() || indicator.isCanceled() || (project != null && project.isDisposed()) || Thread.currentThread().isInterrupted();
   }
 
   /**
@@ -65,18 +83,10 @@ public class TaskProgressMonitor extends ProgressMonitor {
   }
 
   /**
-   * Marks the section of the task as not cancelable
+   * Execute a section of code that can't be canceled
    */
   @Override
-  public void startNonCancelableSection() {
-    indicator.startNonCancelableSection();
-  }
-
-  /**
-   * It's possible to cancel the task from now on
-   */
-  @Override
-  public void finishNonCancelableSection() {
-    indicator.finishNonCancelableSection();
+  public void executeNonCancelableSection(Runnable nonCancelable) {
+    progressManager.executeNonCancelableSection(nonCancelable);
   }
 }

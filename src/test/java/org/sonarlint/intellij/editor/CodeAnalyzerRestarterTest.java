@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -59,7 +59,7 @@ public class CodeAnalyzerRestarterTest extends AbstractSonarLintLightTests {
 
     when(fileEditorManager.getOpenFiles()).thenReturn(new VirtualFile[] {vFile1});
 
-    analyzerRestarter.refreshAllFiles();
+    analyzerRestarter.refreshOpenFiles();
     verifyZeroInteractions(codeAnalyzer);
     verifyZeroInteractions(psiManager);
   }
@@ -69,7 +69,7 @@ public class CodeAnalyzerRestarterTest extends AbstractSonarLintLightTests {
     PsiFile file1 = createAndOpenTestPsiFile("Foo.java", Language.findLanguageByID("JAVA"), "public class Foo {}");
     PsiFile file2 = createAndOpenTestPsiFile("Bar.java", Language.findLanguageByID("JAVA"), "public class Bar {}");
 
-    analyzerRestarter.refreshAllFiles();
+    analyzerRestarter.refreshOpenFiles();
 
     verify(codeAnalyzer).restart(file1);
     verify(codeAnalyzer).restart(file2);

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -32,7 +32,9 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PathUtil;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 import javax.annotation.CheckForNull;
 
 import static com.intellij.openapi.application.ApplicationManager.getApplication;
@@ -58,13 +60,12 @@ public class SonarLintAppUtils {
     return ProjectLocator.getInstance().guessProjectForFile(file);
   }
 
-  public static boolean isOpenFile(Project project, VirtualFile file) {
-    return getApplication().<Boolean>runReadAction(() -> {
+  public static List<VirtualFile> retainOpenFiles(Project project, List<VirtualFile> files) {
+    return getApplication().<List<VirtualFile>>runReadAction(() -> {
       if (!project.isOpen()) {
-        return false;
+        return Collections.emptyList();
       }
-      VirtualFile[] openFiles = FileEditorManager.getInstance(project).getOpenFiles();
-      return Arrays.asList(openFiles).contains(file);
+      return files.stream().filter(f -> FileEditorManager.getInstance(project).isFileOpen(f)).collect(Collectors.toList());
     });
   }
 
@@ -113,7 +114,12 @@ public class SonarLintAppUtils {
    */
   @CheckForNull
   public static String getPathRelativeToModuleBaseDir(Module module, VirtualFile file) {
-    Path baseDir = Paths.get(module.getModuleFilePath()).getParent();
+    String moduleFilePath = module.getModuleFilePath();
+    if ("".equals(moduleFilePath)) {
+      // Non persistent module
+      return null;
+    }
+    Path baseDir = Paths.get(moduleFilePath).getParent();
     Path filePath = Paths.get(file.getPath());
     if (!filePath.startsWith(baseDir)) {
       return null;

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -26,12 +26,14 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
+import com.intellij.serviceContainer.NonInjectable;
 import com.intellij.util.messages.MessageBus;
 import com.intellij.util.messages.MessageBusConnection;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import javax.annotation.CheckForNull;
 import org.sonarlint.intellij.issue.LiveIssue;
 import org.sonarlint.intellij.messages.IssueStoreListener;
@@ -46,11 +48,7 @@ public class CodeAnalyzerRestarter implements IssueStoreListener {
   }
 
 
-  /**
-   * TODO Replace @Deprecated with @NonInjectable when switching to 2019.3 API level
-   * @deprecated in 4.2 to silence a check in 2019.3
-   */
-  @Deprecated
+  @NonInjectable
   CodeAnalyzerRestarter(Project project, DaemonCodeAnalyzer codeAnalyzer) {
     myProject = project;
     this.messageBus = project.getMessageBus();
@@ -62,7 +60,10 @@ public class CodeAnalyzerRestarter implements IssueStoreListener {
     busConnection.subscribe(IssueStoreListener.SONARLINT_ISSUE_STORE_TOPIC, this);
   }
 
-  void refreshAllFiles() {
+  public void refreshOpenFiles() {
+    if (myProject.isDisposed()) {
+      return;
+    }
     FileEditorManager fileEditorManager = FileEditorManager.getInstance(myProject);
 
     VirtualFile[] openFiles = fileEditorManager.getOpenFiles();
@@ -73,6 +74,9 @@ public class CodeAnalyzerRestarter implements IssueStoreListener {
   }
 
   void refreshFiles(Collection<VirtualFile> changedFiles) {
+    if (myProject.isDisposed()) {
+      return;
+    }
     FileEditorManager fileEditorManager = FileEditorManager.getInstance(myProject);
     VirtualFile[] openFiles = fileEditorManager.getOpenFiles();
     Arrays.stream(openFiles)
@@ -90,11 +94,11 @@ public class CodeAnalyzerRestarter implements IssueStoreListener {
     return PsiManager.getInstance(myProject).findFile(virtualFile);
   }
 
-  @Override public void filesChanged(final Map<VirtualFile, Collection<LiveIssue>> map) {
-    ApplicationManager.getApplication().invokeLater(() -> refreshFiles(map.keySet()));
+  @Override public void filesChanged(final Set<VirtualFile> changedFiles) {
+    ApplicationManager.getApplication().invokeLater(() -> refreshFiles(changedFiles));
   }
 
   @Override public void allChanged() {
-    ApplicationManager.getApplication().invokeLater(this::refreshAllFiles);
+    ApplicationManager.getApplication().invokeLater(this::refreshOpenFiles);
   }
 }

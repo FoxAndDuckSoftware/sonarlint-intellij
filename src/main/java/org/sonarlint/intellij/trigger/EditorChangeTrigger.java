@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,31 +20,35 @@
 package org.sonarlint.intellij.trigger;
 
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.components.AbstractProjectComponent;
 import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.event.DocumentEvent;
 import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import javax.annotation.concurrent.ThreadSafe;
-import org.sonarlint.intellij.analysis.SonarLintJob;
-import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
-import org.sonarlint.intellij.messages.TaskListener;
+import org.sonarlint.intellij.analysis.AnalysisRequest;
+import org.sonarlint.intellij.analysis.AnalysisTask;
+import org.sonarlint.intellij.messages.AnalysisListener;
 import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
+
+import static org.sonarlint.intellij.config.Settings.getGlobalSettings;
 
 @ThreadSafe
 public class EditorChangeTrigger implements DocumentListener, Disposable {
   private static final int DEFAULT_TIMER_MS = 2000;
 
   // entries in this map mean that the file is "dirty"
-  private final Map<VirtualFile, Long> eventMap = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<VirtualFile, Long> eventMap = new ConcurrentHashMap<>();
   private final EventWatcher watcher;
   private final int timerMs = DEFAULT_TIMER_MS;
   private final Project myProject;
@@ -57,10 +61,10 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
   public void onProjectOpened() {
     myProject.getMessageBus()
       .connect(myProject)
-      .subscribe(TaskListener.SONARLINT_TASK_TOPIC, new TaskListener.Adapter() {
+      .subscribe(AnalysisListener.TOPIC, new AnalysisListener.Adapter() {
         @Override
-        public void started(SonarLintJob job) {
-          removeFiles(job.allFiles());
+        public void started(AnalysisRequest analysisRequest) {
+          removeFiles(analysisRequest.files());
         }
       });
     watcher.start();
@@ -74,8 +78,7 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
 
   @Override
   public void documentChanged(DocumentEvent event) {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
-    if (!globalSettings.isAutoTrigger()) {
+    if (!getGlobalSettings().isAutoTrigger()) {
       return;
     }
     VirtualFile file = FileDocumentManager.getInstance().getFile(event.getDocument());
@@ -94,7 +97,7 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
   /**
    * Marks a file as launched, resetting its state to unchanged
    */
-  public void removeFiles(Stream<VirtualFile> files) {
+  private void removeFiles(Collection<VirtualFile> files) {
     files.forEach(eventMap::remove);
   }
 
@@ -105,6 +108,8 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
   private class EventWatcher extends Thread {
 
     private boolean stop = false;
+    private AnalysisTask task;
+
     EventWatcher() {
       this.setDaemon(true);
       this.setName("sonarlint-auto-trigger-" + myProject.getName());
@@ -127,11 +132,18 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
       }
     }
 
-    private void triggerFile(VirtualFile file) {
-      SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
-      if (SonarLintAppUtils.isOpenFile(myProject, file) && globalSettings.isAutoTrigger()) {
-        SonarLintSubmitter submitter = SonarLintUtils.getService(myProject, SonarLintSubmitter.class);
-        submitter.submitFiles(Collections.singleton(file), TriggerType.EDITOR_CHANGE, true);
+    private void triggerFiles(List<VirtualFile> files) {
+      if (getGlobalSettings().isAutoTrigger()) {
+        List<VirtualFile> openFilesToAnalyze = SonarLintAppUtils.retainOpenFiles(myProject, files);
+        if (!openFilesToAnalyze.isEmpty()) {
+          if (task != null && !task.isFinished()) {
+            task.cancel();
+            return;
+          }
+          files.forEach(eventMap::remove);
+          SonarLintSubmitter submitter = SonarLintUtils.getService(myProject, SonarLintSubmitter.class);
+          task = submitter.submitFiles(openFilesToAnalyze, TriggerType.EDITOR_CHANGE, true);
+        }
       }
     }
 
@@ -139,6 +151,7 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
       long t = System.currentTimeMillis();
 
       Iterator<Map.Entry<VirtualFile, Long>> it = eventMap.entrySet().iterator();
+      List<VirtualFile> filesToTrigger = new ArrayList<>();
       while (it.hasNext()) {
         Map.Entry<VirtualFile, Long> e = it.next();
         if (!e.getKey().isValid()) {
@@ -149,10 +162,10 @@ public class EditorChangeTrigger implements DocumentListener, Disposable {
         // filter files opened in the editor
         // use some heuristics based on analysis time or average pauses? Or make it configurable?
         if (e.getValue() + timerMs < t) {
-          triggerFile(e.getKey());
-          it.remove();
+          filesToTrigger.add(e.getKey());
         }
       }
+      triggerFiles(filesToTrigger);
     }
 
   }

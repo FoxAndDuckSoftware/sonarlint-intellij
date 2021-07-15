@@ -61,6 +61,24 @@ For the complete list of tasks, see:
 
     ./gradlew tasks
 
+How to run ITs
+------------
+
+    ./gradlew :its:check
+
+The above will start an IDE instance, wait for the UI robot server to start, run the ITs and finally close the IDE.
+
+To test against a specific version of IntelliJ, the `ijVersion` property can be used, e.g.:
+
+    ./gradlew :its:check -PijVersion=IC-2019.3
+
+In development mode, it can be handy to separately start the IDE and run the tests, as follows:
+
+    ./gradlew :its:runIdeForUiTests
+    ./gradlew :its:test
+
+The `:its:runIdeForUiTests` task is blocking. Also please note that the IDE must be in foreground while tests are executed.
+
 How to develop in IntelliJ
 --------------------------
 
@@ -89,6 +107,6 @@ See [release pipeline at Azure DevOps](https://dev.azure.com/sonarsource/DotNetT
 License
 -------
 
-Copyright 2015-2020 SonarSource.
+Copyright 2015-2021 SonarSource.
 
 Licensed under the [GNU Lesser General Public License, Version 3.0](http://www.gnu.org/licenses/lgpl.txt)

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,54 +19,27 @@
  */
 package org.sonarlint.intellij.config.project;
 
-import com.intellij.openapi.components.PersistentStateComponent;
-import com.intellij.openapi.components.State;
-import com.intellij.openapi.components.Storage;
-import com.intellij.util.xmlb.XmlSerializerUtil;
+import com.intellij.util.xmlb.annotations.OptionTag;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
+import org.jetbrains.annotations.NotNull;
+import org.sonarlint.intellij.config.global.ServerConnection;
 
-@State(name = "SonarLintProjectSettings", storages = {@Storage("sonarlint.xml")})
-public final class SonarLintProjectSettings implements PersistentStateComponent<SonarLintProjectSettings> {
+public final class SonarLintProjectSettings {
 
   private boolean verboseEnabled = false;
   private boolean analysisLogsEnabled = false;
   private Map<String, String> additionalProperties = new LinkedHashMap<>();
   private boolean bindingEnabled = false;
-  private String serverId = null;
+  // For backward compatibility
+  @OptionTag("serverId")
+  private String connectionName = null;
   private String projectKey = null;
   private List<String> fileExclusions = new ArrayList<>();
-
-  /**
-   * Constructor called by the XML serialization and deserialization (no args).
-   * Even though this class has the scope of a project, we can't have it injected here.
-   */
-  public SonarLintProjectSettings() {
-
-  }
-
-  /**
-   * TODO Replace @Deprecated with @NonInjectable when switching to 2019.3 API level
-   * @deprecated in 4.2 to silence a check in 2019.3
-   */
-  @Deprecated
-  public SonarLintProjectSettings(SonarLintProjectSettings toCopy) {
-    XmlSerializerUtil.copyBean(toCopy, this);
-  }
-
-  @Override
-  public synchronized SonarLintProjectSettings getState() {
-    return this;
-  }
-
-  @Override
-  public synchronized void loadState(SonarLintProjectSettings state) {
-    XmlSerializerUtil.copyBean(state, this);
-  }
 
   public boolean isVerboseEnabled() {
     return verboseEnabled;
@@ -94,12 +67,12 @@ public final class SonarLintProjectSettings implements PersistentStateComponent<
   }
 
   @CheckForNull
-  public String getServerId() {
-    return serverId;
+  public String getConnectionName() {
+    return connectionName;
   }
 
-  public void setServerId(@Nullable String serverId) {
-    this.serverId = serverId;
+  public void setConnectionName(@Nullable String connectionName) {
+    this.connectionName = connectionName;
   }
 
   public boolean isBindingEnabled() {
@@ -119,12 +92,30 @@ public final class SonarLintProjectSettings implements PersistentStateComponent<
   }
 
   public List<String> getFileExclusions() {
-    return new ArrayList<>(fileExclusions);
+    return fileExclusions;
   }
 
   public void setFileExclusions(List<String> fileExclusions) {
     this.fileExclusions = new ArrayList<>(fileExclusions);
   }
 
+  public boolean isBound() {
+    return isBindingEnabled() && this.projectKey != null && connectionName != null;
+  }
 
+  public boolean isBoundTo(String projectKey, ServerConnection connection) {
+    return isBindingEnabled() && projectKey.equals(this.projectKey) && connection.getName().equals(connectionName);
+  }
+
+  public void bindTo(@NotNull ServerConnection connection, @NotNull String projectKey) {
+    bindingEnabled = true;
+    connectionName = connection.getName();
+    this.projectKey = projectKey;
+  }
+
+  public void unbind() {
+    bindingEnabled = false;
+    connectionName = null;
+    this.projectKey = null;
+  }
 }

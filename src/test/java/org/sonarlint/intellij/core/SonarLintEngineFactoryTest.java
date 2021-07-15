@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,19 +19,15 @@
  */
 package org.sonarlint.intellij.core;
 
-import java.nio.file.Paths;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.SonarLintPlugin;
 import org.sonarlint.intellij.util.GlobalLogOutputTestImpl;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneSonarLintEngine;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class SonarLintEngineFactoryTest extends AbstractSonarLintLightTests {
   private SonarLintEngineFactory factory;
@@ -40,8 +36,6 @@ public class SonarLintEngineFactoryTest extends AbstractSonarLintLightTests {
   @Before
   public void before() {
     System.setProperty("idea.home.path", getHomePath());
-    SonarLintPlugin plugin = mock(SonarLintPlugin.class);
-    when(plugin.getPath()).thenReturn(Paths.get(getHomePath()).resolve("plugins"));
     log = new GlobalLogOutputTestImpl();
     factory = new SonarLintEngineFactory();
   }

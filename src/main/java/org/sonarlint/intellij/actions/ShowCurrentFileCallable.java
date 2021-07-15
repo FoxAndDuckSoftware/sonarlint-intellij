@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -43,6 +43,6 @@ public class ShowCurrentFileCallable implements AnalysisCallback {
   }
 
   private void showCurrentFileTab() {
-    UIUtil.invokeLaterIfNeeded(() -> SonarLintUtils.getService(project, IssuesViewTabOpener.class).openCurrentFile());
+    UIUtil.invokeLaterIfNeeded(() -> SonarLintUtils.getService(project, SonarLintToolWindow.class).openCurrentFile());
   }
 }

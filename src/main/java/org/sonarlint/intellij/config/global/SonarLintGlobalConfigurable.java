@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -21,8 +21,7 @@ package org.sonarlint.intellij.config.global;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.Configurable;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.components.JBTabbedPane;
 import java.awt.BorderLayout;
 import java.util.List;
@@ -32,21 +31,26 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import org.jetbrains.annotations.Nls;
 import org.sonarlint.intellij.config.global.rules.RuleConfigurationPanel;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 import org.sonarlint.intellij.core.SonarLintEngineManager;
 import org.sonarlint.intellij.messages.GlobalConfigurationListener;
 import org.sonarlint.intellij.telemetry.SonarLintTelemetry;
-import org.sonarlint.intellij.trigger.SonarLintSubmitter;
-import org.sonarlint.intellij.trigger.TriggerType;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
+import static org.sonarlint.intellij.config.Settings.getGlobalSettings;
+import static org.sonarlint.intellij.util.SonarLintUtils.analyzeOpenFiles;
+
 public class SonarLintGlobalConfigurable implements Configurable, Configurable.NoScroll {
+  private static final int SETTINGS_TAB_INDEX = 0;
+  private static final int FILE_EXCLUSIONS_TAB_INDEX = 1;
+  private static final int RULES_TAB_INDEX = 2;
+  private static final int ABOUT_TAB_INDEX = 3;
   private JPanel rootPanel;
-  private SonarQubeServerMgmtPanel serversPanel;
+  private ServerConnectionMgmtPanel connectionsPanel;
   private SonarLintGlobalOptionsPanel globalPanel;
   private SonarLintAboutPanel about;
   private GlobalExclusionsPanel exclusions;
   private RuleConfigurationPanel rules;
+  private JBTabbedPane tabs;
 
   @Nls
   @Override
@@ -62,20 +66,21 @@ public class SonarLintGlobalConfigurable implements Configurable, Configurable.N
 
   @Override
   public boolean isModified() {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
+    SonarLintGlobalSettings globalSettings = getGlobalSettings();
     SonarLintTelemetry telemetry = SonarLintUtils.getService(SonarLintTelemetry.class);
-    return serversPanel.isModified(globalSettings) || globalPanel.isModified(globalSettings)
+    return connectionsPanel.isModified(globalSettings) || globalPanel.isModified(globalSettings)
       || about.isModified(telemetry) || exclusions.isModified(globalSettings) || rules.isModified(globalSettings);
   }
 
   @Override
   public void apply() {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
+    SonarLintGlobalSettings globalSettings = getGlobalSettings();
     SonarLintTelemetry telemetry = SonarLintUtils.getService(SonarLintTelemetry.class);
     final boolean exclusionsModified = exclusions.isModified(globalSettings);
     final boolean rulesModified = rules.isModified(globalSettings);
+    final boolean globalSettingsModified = globalPanel.isModified(globalSettings);
 
-    serversPanel.save(globalSettings);
+    connectionsPanel.save(globalSettings);
     globalPanel.save(globalSettings);
     about.save(telemetry);
     rules.save(globalSettings);
@@ -84,32 +89,23 @@ public class SonarLintGlobalConfigurable implements Configurable, Configurable.N
     GlobalConfigurationListener globalConfigurationListener = ApplicationManager.getApplication()
       .getMessageBus().syncPublisher(GlobalConfigurationListener.TOPIC);
     globalConfigurationListener.applied(globalSettings);
-    SonarLintUtils.getService(SonarLintEngineManager.class).reloadServers();
 
-    if (exclusionsModified) {
+    SonarLintUtils.getService(SonarLintEngineManager.class).stopAllDeletedConnectedEnginesAsync();
+
+    // Force reload of the node version and rules in case the nodejs path has been changed
+    reset();
+
+    if (exclusionsModified || globalSettingsModified) {
       analyzeOpenFiles(false);
     } else if (rulesModified) {
       analyzeOpenFiles(true);
     }
   }
 
-  private static void analyzeOpenFiles(boolean unboundOnly) {
-    Project[] openProjects = ProjectManager.getInstance().getOpenProjects();
-
-    for (Project p : openProjects) {
-      SonarLintProjectSettings projectSettings = SonarLintUtils.getService(p, SonarLintProjectSettings.class);
-      if (!unboundOnly || !projectSettings.isBindingEnabled()) {
-        SonarLintUtils.getService(p, SonarLintSubmitter.class).submitOpenFilesAuto(TriggerType.CONFIG_CHANGE);
-      }
-    }
-  }
-
   @CheckForNull
-  public List<SonarQubeServer> getCurrentSettings() {
-    if (serversPanel != null) {
-      SonarLintGlobalSettings settings = new SonarLintGlobalSettings();
-      serversPanel.save(settings);
-      return settings.getSonarQubeServers();
+  public List<ServerConnection> getCurrentConnections() {
+    if (connectionsPanel != null) {
+      return connectionsPanel.getConnections();
     }
 
     return null;
@@ -117,10 +113,10 @@ public class SonarLintGlobalConfigurable implements Configurable, Configurable.N
 
   @Override
   public void reset() {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
+    SonarLintGlobalSettings globalSettings = getGlobalSettings();
     SonarLintTelemetry telemetry = SonarLintUtils.getService(SonarLintTelemetry.class);
 
-    serversPanel.load(globalSettings);
+    connectionsPanel.load(globalSettings);
     globalPanel.load(globalSettings);
     about.load(telemetry);
     rules.load(globalSettings);
@@ -133,13 +129,16 @@ public class SonarLintGlobalConfigurable implements Configurable, Configurable.N
       rootPanel.setVisible(false);
       rootPanel = null;
     }
-    if (serversPanel != null) {
-      serversPanel.dispose();
-      serversPanel = null;
+    if (connectionsPanel != null) {
+      Disposer.dispose(connectionsPanel);
+      connectionsPanel = null;
     }
     about = null;
-    rules = null;
-    SonarLintUtils.getService(SonarLintEngineManager.class).reloadServers();
+    if (rules != null) {
+      Disposer.dispose(rules);
+      rules = null;
+    }
+    SonarLintUtils.getService(SonarLintEngineManager.class).stopAllDeletedConnectedEnginesAsync();
   }
 
   private JPanel getPanel() {
@@ -148,21 +147,26 @@ public class SonarLintGlobalConfigurable implements Configurable, Configurable.N
       rules = new RuleConfigurationPanel();
       exclusions = new GlobalExclusionsPanel();
       globalPanel = new SonarLintGlobalOptionsPanel();
-      serversPanel = new SonarQubeServerMgmtPanel();
+      connectionsPanel = new ServerConnectionMgmtPanel();
 
       JPanel settingsPanel = new JPanel(new BorderLayout());
       settingsPanel.add(globalPanel.getComponent(), BorderLayout.NORTH);
-      settingsPanel.add(serversPanel.getComponent(), BorderLayout.CENTER);
+      settingsPanel.add(connectionsPanel.getComponent(), BorderLayout.CENTER);
 
       rootPanel = new JPanel(new BorderLayout());
-      JBTabbedPane tabs = new JBTabbedPane();
-      tabs.insertTab("Settings", null, settingsPanel, "Configure SonarLint for all projects", 0);
-      tabs.insertTab("File Exclusions", null, exclusions.getComponent(), "Configure which files should be excluded from analysis", 1);
-      tabs.insertTab("Rules", null, rules.getComponent(), "Choose which rules are enabled when not connected to SonarQube", 2);
-      tabs.insertTab("About", null, about.getComponent(), "About SonarLint", 3);
+      tabs = new JBTabbedPane();
+      tabs.insertTab("Settings", null, settingsPanel, "Configure SonarLint for all projects", SETTINGS_TAB_INDEX);
+      tabs.insertTab("File Exclusions", null, exclusions.getComponent(), "Configure which files should be excluded from analysis", FILE_EXCLUSIONS_TAB_INDEX);
+      tabs.insertTab("Rules", null, rules.getComponent(), "Choose which rules are enabled when not bound to SonarQube or SonarCloud", RULES_TAB_INDEX);
+      tabs.insertTab("About", null, about.getComponent(), "About SonarLint", ABOUT_TAB_INDEX);
       rootPanel.add(tabs, BorderLayout.CENTER);
     }
 
     return rootPanel;
+  }
+
+  public void selectRule(String ruleKey) {
+    tabs.setSelectedIndex(RULES_TAB_INDEX);
+    rules.selectRule(ruleKey);
   }
 }

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,15 +20,17 @@
 package org.sonarlint.intellij.ui.tree;
 
 import com.intellij.openapi.editor.RangeMarker;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import javax.annotation.Nullable;
 import javax.swing.tree.DefaultTreeModel;
+import org.sonarlint.intellij.issue.Flow;
+import org.sonarlint.intellij.issue.IssueContext;
 import org.sonarlint.intellij.issue.LiveIssue;
-import org.sonarlint.intellij.ui.nodes.LabelNode;
-import org.sonarlint.intellij.ui.nodes.LocationNode;
+import org.sonarlint.intellij.issue.Location;
+import org.sonarlint.intellij.ui.nodes.FlowNode;
+import org.sonarlint.intellij.ui.nodes.FlowSecondaryLocationNode;
+import org.sonarlint.intellij.ui.nodes.PrimaryLocationNode;
 import org.sonarlint.intellij.ui.nodes.SummaryNode;
 
 public class FlowsTreeModelBuilder {
@@ -47,41 +49,36 @@ public class FlowsTreeModelBuilder {
     model.setRoot(null);
   }
 
-  private static boolean containsLocations(List<LiveIssue.Flow> flows) {
-    return flows.stream().flatMap(f -> f.locations().stream()).findAny().isPresent();
-  }
-
-  public void setFlows(List<LiveIssue.Flow> flows, @Nullable RangeMarker rangeMarker, @Nullable String message) {
-    if (rangeMarker == null || !containsLocations(flows)) {
+  public void populateForIssue(LiveIssue issue) {
+    RangeMarker rangeMarker = issue.getRange();
+    Optional<IssueContext> context = issue.context();
+    if (rangeMarker == null || !context.isPresent()) {
       clearFlows();
       return;
     }
-
-    if (flows.size() == 1) {
-      setSingleFlow(flows.iterator().next(), rangeMarker, message);
-    } else if (flows.stream().noneMatch(flow -> flow.locations().size() != 1)) {
-      setFlatList(flows, rangeMarker, message);
+    IssueContext issueContext = context.get();
+    String message = issue.getMessage();
+    if (issueContext.hasUniqueFlow()) {
+      setSingleFlow(issueContext.flows().get(0), rangeMarker, message);
     } else {
-      setMultipleFlows(flows, rangeMarker, message);
+      setMultipleFlows(issueContext.flows(), rangeMarker, message);
     }
   }
 
-  private void setMultipleFlows(List<LiveIssue.Flow> flows, RangeMarker rangeMarker, @Nullable String message) {
+  private void setMultipleFlows(List<Flow> flows, RangeMarker rangeMarker, @Nullable String message) {
     summary = new SummaryNode();
-    LocationNode primaryLocation = new LocationNode(rangeMarker, message);
-    summary.add(primaryLocation);
+    PrimaryLocationNode primaryLocationNode = new PrimaryLocationNode(rangeMarker, message, flows.get(0));
+    summary.add(primaryLocationNode);
 
     int i = 1;
-    for (LiveIssue.Flow f : flows) {
-      LabelNode label = new LabelNode("Flow " + i);
-      primaryLocation.add(label);
+    for (Flow f : flows) {
+      FlowNode flowNode = new FlowNode(f, "Flow " + i);
+      primaryLocationNode.add(flowNode);
 
-      List<LiveIssue.IssueLocation> reversedLocations = new ArrayList<>(f.locations());
-      Collections.reverse(reversedLocations);
       int j = 1;
-      for (LiveIssue.IssueLocation location : reversedLocations) {
-        LocationNode locationNode = new LocationNode(j, location.location(), location.message());
-        label.add(locationNode);
+      for (Location location : f.getLocations()) {
+        FlowSecondaryLocationNode locationNode = new FlowSecondaryLocationNode(j, location, f);
+        flowNode.add(locationNode);
         j++;
       }
       i++;
@@ -89,35 +86,15 @@ public class FlowsTreeModelBuilder {
     model.setRoot(summary);
   }
 
-  private void setFlatList(List<LiveIssue.Flow> flows, RangeMarker rangeMarker, @Nullable String message) {
+  private void setSingleFlow(Flow flow, RangeMarker rangeMarker, @Nullable String message) {
     summary = new SummaryNode();
-    LocationNode primaryLocation = new LocationNode(rangeMarker, message);
+    PrimaryLocationNode primaryLocation = new PrimaryLocationNode(rangeMarker, message, flow);
     primaryLocation.setBold(true);
     summary.add(primaryLocation);
-
-    flows.stream()
-      .flatMap(flow -> flow.locations().stream())
-      .sorted(Comparator.comparing(i -> i.location().getStartOffset()))
-      .forEachOrdered(location -> {
-        LocationNode locationNode = new LocationNode(location.location(), location.message());
-        primaryLocation.add(locationNode);
-      });
-
-    model.setRoot(summary);
-  }
-
-  private void setSingleFlow(LiveIssue.Flow flow, RangeMarker rangeMarker, @Nullable String message) {
-    summary = new SummaryNode();
-    LocationNode primaryLocation = new LocationNode(rangeMarker, message);
-    primaryLocation.setBold(true);
-    summary.add(primaryLocation);
-
-    List<LiveIssue.IssueLocation> reversedLocations = new ArrayList<>(flow.locations());
-    Collections.reverse(reversedLocations);
 
     int i = 1;
-    for (LiveIssue.IssueLocation location : reversedLocations) {
-      LocationNode locationNode = new LocationNode(i++, location.location(), location.message());
+    for (Location location : flow.getLocations()) {
+      FlowSecondaryLocationNode locationNode = new FlowSecondaryLocationNode(i++, location, flow);
       primaryLocation.add(locationNode);
     }
 

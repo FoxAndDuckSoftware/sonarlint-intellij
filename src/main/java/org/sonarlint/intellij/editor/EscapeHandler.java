@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -40,9 +40,9 @@ public class EscapeHandler extends EditorActionHandler {
   protected void doExecute(Editor editor, @Nullable Caret caret, DataContext dataContext) {
     Project project = editor.getProject();
     if (project != null) {
-      SonarLintHighlighting highlighting = SonarLintUtils.getService(project, SonarLintHighlighting.class);
+      EditorDecorator highlighting = SonarLintUtils.getService(project, EditorDecorator.class);
       if (highlighting.isActiveInEditor(editor)) {
-        highlighting.removeHighlightingFlows();
+        highlighting.removeHighlights();
         return;
       }
     }
@@ -57,7 +57,7 @@ public class EscapeHandler extends EditorActionHandler {
   private static boolean isActive(Editor editor) {
     Project project = editor.getProject();
     if (project != null) {
-      SonarLintHighlighting highlighting = SonarLintUtils.getService(project, SonarLintHighlighting.class);
+      EditorDecorator highlighting = SonarLintUtils.getService(project, EditorDecorator.class);
       if (highlighting.isActiveInEditor(editor)) {
         return true;
       }

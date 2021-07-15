@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -24,29 +24,25 @@ import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
 import org.sonarlint.intellij.SonarLintTestUtils;
-import org.sonarlint.intellij.AbstractSonarLintMockedTests;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 public class ToolWindowLogAnalysisActionTest extends AbstractSonarLintLightTests {
   private ToolWindowLogAnalysisAction action = new ToolWindowLogAnalysisAction();
-  private SonarLintProjectSettings settings = new SonarLintProjectSettings();
   private AnActionEvent event;
 
   @Before
   public void prepare() {
     event = SonarLintTestUtils.createAnActionEvent(getProject());
-    replaceProjectService(SonarLintProjectSettings.class, settings);
   }
 
   @Test
   public void testSelected() {
-    settings.setAnalysisLogsEnabled(true);
+    getProjectSettings().setAnalysisLogsEnabled(true);
     assertThat(action.isSelected(event)).isTrue();
 
-    settings.setAnalysisLogsEnabled(false);
+    getProjectSettings().setAnalysisLogsEnabled(false);
     assertThat(action.isSelected(event)).isFalse();
 
     when(event.getProject()).thenReturn(null);
@@ -55,17 +51,17 @@ public class ToolWindowLogAnalysisActionTest extends AbstractSonarLintLightTests
 
   @Test
   public void testSetSelected() {
-    settings.setAnalysisLogsEnabled(true);
+    getProjectSettings().setAnalysisLogsEnabled(true);
 
     action.setSelected(event, false);
-    assertThat(settings.isAnalysisLogsEnabled()).isFalse();
+    assertThat(getProjectSettings().isAnalysisLogsEnabled()).isFalse();
 
     action.setSelected(event, true);
-    assertThat(settings.isAnalysisLogsEnabled()).isTrue();
+    assertThat(getProjectSettings().isAnalysisLogsEnabled()).isTrue();
 
     // do nothing if there is no project
     when(event.getProject()).thenReturn(null);
     action.setSelected(event, false);
-    assertThat(settings.isAnalysisLogsEnabled()).isTrue();
+    assertThat(getProjectSettings().isAnalysisLogsEnabled()).isTrue();
   }
 }

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -28,7 +28,6 @@ import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.tree.TreeUtil;
 import java.awt.BorderLayout;
 import javax.swing.JPanel;
-
 import org.sonarlint.intellij.messages.AnalysisResultsListener;
 import org.sonarlint.intellij.messages.StatusListener;
 import org.sonarlint.intellij.util.SonarLintActions;
@@ -76,6 +75,9 @@ public class SonarLintAnalysisResultsPanel extends AbstractIssuesPanel implement
   }
 
   public void updateIssues() {
+    if (project.isDisposed()) {
+      return;
+    }
     lastAnalysisPanel.update(results.getLastAnalysisDate(), results.whatAnalyzed(), results.getLabelText());
     treeBuilder.updateModel(results.issues(), results.getEmptyText());
     expandTree();

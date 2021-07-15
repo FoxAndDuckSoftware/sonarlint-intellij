@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -36,8 +36,8 @@ public class SonarLintProjectSettingsTest {
     settings.setProjectKey("project1");
     assertThat(settings.getProjectKey()).isEqualTo("project1");
 
-    settings.setServerId("server1");
-    assertThat(settings.getServerId()).isEqualTo("server1");
+    settings.setConnectionName("server1");
+    assertThat(settings.getConnectionName()).isEqualTo("server1");
 
     settings.setAnalysisLogsEnabled(true);
     assertThat(settings.isAnalysisLogsEnabled()).isTrue();
@@ -47,8 +47,6 @@ public class SonarLintProjectSettingsTest {
 
     settings.setBindingEnabled(true);
     assertThat(settings.isBindingEnabled()).isTrue();
-
-    assertThat(settings.getState()).isEqualTo(settings);
 
     settings.setAdditionalProperties(Collections.singletonMap("key", "value"));
     assertThat(settings.getAdditionalProperties()).containsExactly(MapEntry.entry("key", "value"));

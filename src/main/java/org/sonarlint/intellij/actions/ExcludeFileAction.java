@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -41,6 +41,8 @@ import org.sonarlint.intellij.trigger.TriggerType;
 import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
+import static org.sonarlint.intellij.config.Settings.getSettingsFor;
+
 public class ExcludeFileAction extends DumbAwareAction {
   public ExcludeFileAction() {
 
@@ -62,7 +64,7 @@ public class ExcludeFileAction extends DumbAwareAction {
     }
 
     VirtualFile[] files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY);
-    if (!ActionPlaces.isPopupPlace(e.getPlace()) || files == null || files.length == 0) {
+    if (!ActionPlaces.isPopupPlace(e.getPlace()) || files == null || files.length == 0 || AbstractSonarAction.isRiderSlnOrCsproj(files)) {
       e.getPresentation().setEnabled(false);
       e.getPresentation().setVisible(false);
       return;
@@ -70,8 +72,7 @@ public class ExcludeFileAction extends DumbAwareAction {
 
     e.getPresentation().setVisible(true);
 
-    SonarLintProjectSettings settings = SonarLintUtils.getService(project, SonarLintProjectSettings.class);
-    List<String> exclusions = new ArrayList<>(settings.getFileExclusions());
+    List<String> exclusions = new ArrayList<>(getSettingsFor(project).getFileExclusions());
 
     boolean anyFileToAdd = toStringStream(project, files)
       .anyMatch(path -> !exclusions.contains(path));
@@ -89,7 +90,7 @@ public class ExcludeFileAction extends DumbAwareAction {
       return;
     }
 
-    SonarLintProjectSettings settings = SonarLintUtils.getService(project, SonarLintProjectSettings.class);
+    SonarLintProjectSettings settings = getSettingsFor(project);
     List<String> exclusions = new ArrayList<>(settings.getFileExclusions());
 
     List<String> newExclusions = toStringStream(project, files)

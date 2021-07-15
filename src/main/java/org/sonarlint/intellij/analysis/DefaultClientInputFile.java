@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -22,35 +22,47 @@ package org.sonarlint.intellij.analysis;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.vfs.VirtualFile;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.file.Paths;
 import javax.annotation.Nullable;
+
+import org.sonarsource.sonarlint.core.client.api.common.Language;
 import org.sonarsource.sonarlint.core.client.api.common.analysis.ClientInputFile;
 
 public class DefaultClientInputFile implements ClientInputFile {
+  private static final int DEFAULT_BUFFER_SIZE = 1024 * 4;
+
   private final String path;
   private final String relativePath;
   private final boolean test;
   private final Charset charset;
   private final VirtualFile vFile;
   private final Document doc;
+  @Nullable
+  private final Language language;
   private final URI uri;
 
-  DefaultClientInputFile(VirtualFile vFile, String relativePath, boolean isTest, Charset charset, @Nullable Document doc) {
+  public DefaultClientInputFile(VirtualFile vFile, String relativePath, boolean isTest, Charset charset, @Nullable Document doc, @Nullable Language language) {
     this.path = vFile.getPath();
     this.relativePath = relativePath;
     this.test = isTest;
     this.charset = charset;
     this.vFile = vFile;
     this.doc = doc;
+    this.language = language;
     this.uri = createURI();
   }
 
-  DefaultClientInputFile(VirtualFile vFile, String relativePath, boolean isTest, Charset charset) {
-    this(vFile, relativePath, isTest, charset, null);
+  DefaultClientInputFile(VirtualFile vFile, String relativePath, boolean isTest, Charset charset, @Nullable Language language) {
+    this(vFile, relativePath, isTest, charset, null, language);
+  }
+
+  public DefaultClientInputFile(VirtualFile vFile, String relativePath, boolean isTest, Charset charset) {
+    this(vFile, relativePath, isTest, charset, null, null);
   }
 
   @Override public String getPath() {
@@ -89,7 +101,15 @@ public class DefaultClientInputFile implements ClientInputFile {
 
   @Override public String contents() throws IOException {
     if (doc == null) {
-      return new String(vFile.contentsToByteArray(), charset);
+      ByteArrayOutputStream result = new ByteArrayOutputStream();
+      try (InputStream inputStream = inputStream()) {
+        byte[] buffer = new byte[DEFAULT_BUFFER_SIZE];
+        int length;
+        while ((length = inputStream.read(buffer)) != -1) {
+          result.write(buffer, 0, length);
+        }
+      }
+      return result.toString(charset.name());
     }
     return doc.getText();
   }
@@ -101,5 +121,10 @@ public class DefaultClientInputFile implements ClientInputFile {
   @Override
   public URI uri() {
     return uri;
+  }
+
+  @Override
+  public Language language() {
+    return language;
   }
 }

@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -95,20 +95,54 @@ public class SonarLintAboutPanel implements ConfigurationPanel<SonarLintTelemetr
     link.addHyperlinkListener(new HyperlinkAdapter() {
       @Override
       protected void hyperlinkActivated(HyperlinkEvent e) {
-        final JLabel label = new JLabel("{\n"
+        final JLabel label = new JLabel("<html><pre>{\n"
           + "    \"days_since_installation\": 120,\n"
           + "    \"days_of_use\": 40,\n"
           + "    \"sonarlint_version\": \"2.9\",\n"
           + "    \"sonarlint_product\": \"SonarLint IntelliJ\",\n"
-          + "    \"ide_version\": \"IntelliJ IDEA 2020.1\",\n"
+          + "    \"ide_version\": \"IntelliJ IDEA 2020.1 (Community Edition)\",\n"
           + "    \"os\": \"Linux\",\n"
           + "    \"jre\": \"11.0.6\",\n"
+          + "    \"nodejs\": \"11.12.0\",\n"
           + "    \"connected_mode_used\": true,\n"
           + "    \"connected_mode_sonarcloud\": false,\n"
           + "    \"system_time\":\"2018-06-27T16:31:49.173+01:00\",\n"
           + "    \"install_time\":\"2018-02-27T16:30:49.124+01:00\",\n"
-          + "    \"analyses\":[{\"language\":\"java\",\"rate_per_duration\":{\"0-300\":100,\"300-500\":0,\"500-1000\":0,\"1000-2000\":0,\"2000-4000\":0,\"4000+\":0}}]\n"
-          + "}");
+          + "    \"analyses\":[{\"language\":\"java\",\"rate_per_duration\":{\"0-300\":100,\"300-500\":0,\"500-1000\":0,\"1000-2000\":0,\"2000-4000\":0,\"4000+\":0}}],\n"
+          + "    \"server_notifications\": {\n"
+          + "      \"count_by_type\": {\n"
+          + "        \"NEW_ISSUES\": {\n"
+          + "          \"received\": 1,\n"
+          + "          \"clicked\": 0\n"
+          + "        },\n"
+          + "        \"QUALITY_GATE\": {\n"
+          + "          \"received\": 1,\n"
+          + "          \"clicked\": 0\n"
+          + "        }\n"
+          + "      },\n"
+          + "      \"disabled\": false\n"
+          + "    },\n"
+          + "    \"show_hotspot\": {\n"
+          + "      \"requests_count\": 3\n"
+          + "    },\n"
+          + "      \"taint_vulnerabilities\": {\n"
+          + "        \"investigated_remotely_count\": 1,\n"
+          + "        \"investigated_locally_count\": 4\n"
+          + "      }\n"
+          + "     \"rules\": {\n"
+          + "      \"raised_issues\": [\n"
+          + "        \"secrets:S6290\",\n"
+          + "        \"javascript:S3353\",\n"
+          + "        \"javascript:S1441\"\n"
+          + "      ],\n"
+          + "      \"non_default_enabled\": [\n"
+          + "        \"javascript:S3513\"\n"
+          + "      ],\n"
+          + "      \"default_disabled\":  [\n"
+          + "        \"javascript:S1994\"\n"
+          + "      ],\n"
+          + "    }"
+          + "}</pre></html>");
         label.setBorder(HintUtil.createHintBorder());
         label.setBackground(HintUtil.getInformationColor());
         label.setOpaque(true);

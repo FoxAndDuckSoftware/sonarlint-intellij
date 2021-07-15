@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,15 +20,11 @@
 package org.sonarlint.intellij.config.global.wizard;
 
 import com.intellij.ide.wizard.AbstractWizardStepEx;
-import com.intellij.ide.wizard.CommitStepException;
-import java.util.List;
-import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.sonarsource.sonarlint.core.client.api.connected.RemoteOrganization;
 
 public class ConfirmStep extends AbstractWizardStepEx {
   private static final String TEXT1 = "Connection successfully created.";
@@ -38,7 +34,6 @@ public class ConfirmStep extends AbstractWizardStepEx {
   private JPanel panel;
   private JLabel textArea;
   private JLabel textArea2;
-  private JCheckBox notificationsCheckBox;
 
   public ConfirmStep(WizardModel model, boolean editing) {
     super("Configuration completed");
@@ -60,37 +55,45 @@ public class ConfirmStep extends AbstractWizardStepEx {
       textArea.setText(TEXT1);
     }
     textArea2.setText(TEXT2);
-    notificationsCheckBox.setVisible(model.isNotificationsSupported());
-    notificationsCheckBox.setEnabled(model.isNotificationsSupported());
-    notificationsCheckBox.setSelected(model.isNotificationsSupported() && model.isNotificationsEnabled());
   }
 
-  @NotNull @Override public Object getStepId() {
+  @NotNull
+  @Override
+  public Object getStepId() {
     return ConfirmStep.class;
   }
 
-  @Nullable @Override public Object getNextStepId() {
+  @Nullable
+  @Override
+  public Object getNextStepId() {
     return null;
   }
 
-  @Nullable @Override public Object getPreviousStepId() {
-    List<RemoteOrganization> orgList = model.getOrganizationList();
-    if (orgList != null && orgList.size() > 1) {
-      return OrganizationStep.class;
-    } else {
-      return AuthStep.class;
+  @Nullable
+  @Override
+  public Object getPreviousStepId() {
+    if (model.isNotificationsSupported()) {
+      return NotificationsStep.class;
     }
+    if (model.getServerType() == WizardModel.ServerType.SONARCLOUD) {
+      return OrganizationStep.class;
+    }
+    return AuthStep.class;
   }
 
-  @Override public boolean isComplete() {
+  @Override
+  public boolean isComplete() {
     return true;
   }
 
-  @Override public void commit(CommitType commitType) throws CommitStepException {
-    model.setNotificationsEnabled(notificationsCheckBox.isSelected());
+  @Override
+  public void commit(CommitType commitType) {
   }
 
-  @Nullable @Override public JComponent getPreferredFocusedComponent() {
+  @Nullable
+  @Override
+  public JComponent getPreferredFocusedComponent() {
     return null;
   }
+
 }

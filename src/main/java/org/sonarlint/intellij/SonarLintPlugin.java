@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -21,11 +21,12 @@ package org.sonarlint.intellij;
 
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManager;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.extensions.PluginId;
-
 import java.nio.file.Path;
+import org.sonarlint.intellij.http.ApacheHttpClient;
 
-public class SonarLintPlugin {
+public class SonarLintPlugin implements Disposable {
   private IdeaPluginDescriptor plugin;
 
   public String getVersion() {
@@ -41,5 +42,10 @@ public class SonarLintPlugin {
       plugin = PluginManager.getPlugin(PluginId.getId("org.sonarlint.idea"));
     }
     return plugin;
+  }
+
+  @Override
+  public void dispose() {
+    ApacheHttpClient.getDefault().close();
   }
 }

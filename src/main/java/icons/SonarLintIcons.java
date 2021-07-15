@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,7 +20,6 @@
 package icons;
 
 import com.intellij.openapi.util.IconLoader;
-
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;

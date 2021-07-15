@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -20,10 +20,9 @@
 package org.sonarlint.intellij.util;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.ui.SonarLintConsole;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
 import org.sonarsource.sonarlint.core.client.api.common.LogOutput;
 
 import static org.mockito.Mockito.mock;
@@ -55,15 +54,6 @@ public class GlobalLogOutputImplTest extends AbstractSonarLintLightTests {
 
     output.log("trace", LogOutput.Level.TRACE);
     verify(console).debug("trace");
-  }
-
-  @Test
-  @Ignore
-  public void should_not_fail_if_remove_nonexisting_console() {
-    SonarLintConsole console = mock(SonarLintConsole.class);
-    replaceProjectService(SonarLintConsole.class, console);
-// XXX find a way to close the project and check that we have no log
-//    assertThatCode(()->output.log("msg", LogOutput.Level.WARN)).doesNotThrowAnyException();
   }
 
 }

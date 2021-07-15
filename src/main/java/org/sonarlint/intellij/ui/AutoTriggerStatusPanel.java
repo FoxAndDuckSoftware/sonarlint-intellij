@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -22,12 +22,14 @@ package org.sonarlint.intellij.ui;
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.codeInsight.hint.HintUtil;
 import com.intellij.ide.PowerSaveMode;
-import com.intellij.openapi.fileEditor.FileEditorManagerAdapter;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.ui.GuiUtils;
 import com.intellij.ui.HyperlinkAdapter;
 import com.intellij.ui.HyperlinkLabel;
 import com.intellij.ui.awt.RelativePoint;
@@ -39,6 +41,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Map;
 import javax.swing.Box;
 import javax.swing.Icon;
 import javax.swing.JLabel;
@@ -46,14 +49,13 @@ import javax.swing.JPanel;
 import javax.swing.event.HyperlinkEvent;
 import org.jetbrains.annotations.NotNull;
 import org.sonarlint.intellij.analysis.LocalFileExclusions;
-import org.sonarlint.intellij.analysis.VirtualFileTestPredicate;
 import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
-import org.sonarlint.intellij.core.ProjectBindingManager;
 import org.sonarlint.intellij.exception.InvalidBindingException;
 import org.sonarlint.intellij.messages.GlobalConfigurationListener;
 import org.sonarlint.intellij.messages.ProjectConfigurationListener;
-import org.sonarlint.intellij.util.SonarLintAppUtils;
 import org.sonarlint.intellij.util.SonarLintUtils;
+
+import static org.sonarlint.intellij.config.Settings.getGlobalSettings;
 
 public class AutoTriggerStatusPanel {
   private static final String AUTO_TRIGGER_ENABLED = "AUTO_TRIGGER_ENABLED";
@@ -63,14 +65,12 @@ public class AutoTriggerStatusPanel {
   private static final String TOOLTIP = "Some files are not automatically analyzed. Check the SonarLint debug logs for details.";
 
   private final Project project;
-  private final LocalFileExclusions localFileExclusions;
 
   private JPanel panel;
   private CardLayout layout;
 
   public AutoTriggerStatusPanel(Project project) {
     this.project = project;
-    this.localFileExclusions = new LocalFileExclusions(project);
     createPanel();
     switchCards();
     subscribeToEvents();
@@ -83,13 +83,14 @@ public class AutoTriggerStatusPanel {
   private void subscribeToEvents() {
     MessageBusConnection busConnection = project.getMessageBus().connect(project);
     busConnection.subscribe(GlobalConfigurationListener.TOPIC, new GlobalConfigurationListener.Adapter() {
-      @Override public void applied(SonarLintGlobalSettings settings) {
+      @Override
+      public void applied(SonarLintGlobalSettings settings) {
         switchCards();
       }
     });
     busConnection.subscribe(ProjectConfigurationListener.TOPIC, s -> switchCards());
     busConnection.subscribe(PowerSaveMode.TOPIC, this::switchCards);
-    busConnection.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerAdapter() {
+    busConnection.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, new FileEditorManagerListener() {
       @Override
       public void selectionChanged(@NotNull FileEditorManagerEvent event) {
         switchCards();
@@ -97,47 +98,36 @@ public class AutoTriggerStatusPanel {
     });
   }
 
-  private void switchCards() {
-    String card = getCard();
-    layout.show(panel, card);
+  private void switchCard(String cardName) {
+    GuiUtils.invokeLaterIfNeeded(() -> layout.show(panel, cardName), ModalityState.defaultModalityState());
   }
 
-  private String getCard() {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
-    if (!globalSettings.isAutoTrigger()) {
-      return AUTO_TRIGGER_DISABLED;
+  private void switchCards() {
+    ApplicationManager.getApplication().assertIsDispatchThread();
+    if (!getGlobalSettings().isAutoTrigger()) {
+      switchCard(AUTO_TRIGGER_DISABLED);
+      return;
     }
 
     VirtualFile selectedFile = SonarLintUtils.getSelectedFile(project);
     if (selectedFile != null) {
-      Module m = SonarLintAppUtils.findModuleForFile(selectedFile, project);
-      LocalFileExclusions.Result result = localFileExclusions.canAnalyze(selectedFile, m);
-      if (result.isExcluded()) {
-        return FILE_DISABLED;
-      }
-      // here module is not null or file would have been already excluded by canAnalyze
-      result = localFileExclusions.checkExclusions(selectedFile, m);
-      if (result.isExcluded()) {
-        return FILE_DISABLED;
-      }
-
-      // Module can't be null here, otherwise it's excluded
-      if (isExcludedInServer(m, selectedFile)) {
-        return FILE_DISABLED;
-      }
-    }
-
-    return AUTO_TRIGGER_ENABLED;
-  }
-
-  private boolean isExcludedInServer(Module m, VirtualFile f) {
-    VirtualFileTestPredicate testPredicate = SonarLintUtils.getService(m, VirtualFileTestPredicate.class);
-    try {
-      Collection<VirtualFile> afterExclusion = SonarLintUtils.getService(project, ProjectBindingManager.class).getFacade().getExcluded(m, Collections.singleton(f), testPredicate);
-      return !afterExclusion.isEmpty();
-    } catch (InvalidBindingException e) {
-      // not much we can do, analysis won't run anyway. Notification about it was shown by SonarLintEngineManager
-      return false;
+      // Computing server exclusions may take time, so lets move from EDT to pooled thread
+      ApplicationManager.getApplication().executeOnPooledThread(() -> {
+        LocalFileExclusions localFileExclusions = SonarLintUtils.getService(project, LocalFileExclusions.class);
+        try {
+          Map<Module, Collection<VirtualFile>> nonExcluded = localFileExclusions.retainNonExcludedFilesByModules(Collections.singleton(selectedFile), false, (f, r) -> {
+            switchCard(FILE_DISABLED);
+          });
+          if (!nonExcluded.isEmpty()) {
+            switchCard(AUTO_TRIGGER_ENABLED);
+          }
+        } catch (InvalidBindingException e) {
+          // not much we can do, analysis won't run anyway. Notification about it was shown by SonarLintEngineManager
+          switchCard(AUTO_TRIGGER_ENABLED);
+        }
+      });
+    } else {
+      switchCard(AUTO_TRIGGER_ENABLED);
     }
   }
 

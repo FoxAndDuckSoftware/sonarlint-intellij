@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -32,21 +32,27 @@ import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.keymap.Keymap;
 import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.keymap.KeymapUtil;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiFile;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.util.XmlStringUtil;
-
 import java.util.Collection;
+import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.sonarlint.intellij.config.SonarLintTextAttributes;
+import org.sonarlint.intellij.issue.IssueContext;
 import org.sonarlint.intellij.issue.IssueManager;
 import org.sonarlint.intellij.issue.LiveIssue;
+import org.sonarlint.intellij.issue.vulnerabilities.LocalTaintVulnerability;
+import org.sonarlint.intellij.issue.vulnerabilities.TaintVulnerabilitiesPresenter;
 import org.sonarlint.intellij.util.SonarLintSeverity;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
+import static java.util.Collections.emptyList;
+import static org.sonarlint.intellij.util.SonarLintUtils.getService;
 import static org.sonarlint.intellij.util.SonarLintUtils.isPhpFile;
 import static org.sonarlint.intellij.util.SonarLintUtils.isPhpLanguageRegistered;
 
@@ -58,17 +64,35 @@ public class SonarExternalAnnotator extends ExternalAnnotator<SonarExternalAnnot
       return;
     }
 
-    IssueManager issueManager = SonarLintUtils.getService(file.getProject(), IssueManager.class);
+    Project project = file.getProject();
+    IssueManager issueManager = getService(project, IssueManager.class);
     Collection<LiveIssue> issues = issueManager.getForFile(file.getVirtualFile());
     issues.stream()
       .filter(issue -> !issue.isResolved())
       .forEach(issue -> {
-        // reject non-null ranges that are no longer valid. It probably means that they were deleted from the file.
-        RangeMarker range = issue.getRange();
-        if (range == null || range.isValid()) {
-          addAnnotation(issue, holder);
+        // reject ranges that are no longer valid. It probably means that they were deleted from the file, or the file was deleted
+        TextRange validTextRange = getValidTextRange(issue);
+        if (validTextRange != null) {
+          addAnnotation(issue, validTextRange, holder);
         }
       });
+
+    if (SonarLintUtils.enableTaintVulnerabilities()) {
+      getService(project, TaintVulnerabilitiesPresenter.class).getCurrentVulnerabilitiesByFile()
+        .getOrDefault(file.getVirtualFile(), emptyList())
+        .forEach(vulnerability -> addAnnotation(vulnerability, holder));
+    }
+  }
+
+  @CheckForNull
+  private static TextRange getValidTextRange(LiveIssue issue) {
+    RangeMarker rangeMarker = issue.getRange();
+    if (rangeMarker == null && issue.psiFile().isValid()) {
+      return issue.psiFile().getTextRange();
+    } else if (rangeMarker != null && rangeMarker.isValid()) {
+      return createTextRange(rangeMarker);
+    }
+    return null;
   }
 
   private static boolean shouldSkip(@NotNull PsiFile file) {
@@ -92,24 +116,15 @@ public class SonarExternalAnnotator extends ExternalAnnotator<SonarExternalAnnot
     return collectedInfo;
   }
 
-  private void addAnnotation(LiveIssue issue, AnnotationHolder annotationHolder) {
-    TextRange textRange;
-
-    if (issue.getRange() != null) {
-      textRange = createTextRange(issue.getRange());
-    } else {
-      textRange = issue.psiFile().getTextRange();
-    }
-
+  private void addAnnotation(LiveIssue issue, TextRange validTextRange, AnnotationHolder annotationHolder) {
     String htmlMsg = getHtmlMessage(issue);
 
     Annotation annotation = annotationHolder
-      .createAnnotation(getSeverity(issue.getSeverity()), textRange, issue.getMessage(), htmlMsg);
-    annotation.registerFix(new DisableRuleQuickFix(issue.getRuleKey()));
+      .createAnnotation(getSeverity(issue.getSeverity()), validTextRange, issue.getMessage(), htmlMsg);
+    annotation.registerFix(new ShowRuleDescriptionIntentionAction(issue.getRuleKey()));
+    annotation.registerFix(new DisableRuleIntentionAction(issue.getRuleKey()));
 
-    if (!issue.flows().isEmpty()) {
-      annotation.registerFix(new ShowLocationsIntention(issue.getRange(), issue.getMessage(), issue.flows()));
-    }
+    issue.context().ifPresent(c -> annotation.registerFix(new ShowLocationsIntentionAction(issue, c)));
 
     if (issue.getRange() == null) {
       annotation.setFileLevelAnnotation(true);
@@ -126,6 +141,33 @@ public class SonarExternalAnnotator extends ExternalAnnotator<SonarExternalAnnot
      * - let Annotation#getTextAttributes decide it based on highlight type and severity.
      */
     annotation.setHighlightType(getType(issue.getSeverity()));
+  }
+
+  private static void addAnnotation(LocalTaintVulnerability vulnerability, AnnotationHolder annotationHolder) {
+    RangeMarker rangeMarker = vulnerability.rangeMarker();
+    if (rangeMarker == null) {
+      return;
+    }
+    TextRange textRange = createTextRange(rangeMarker);
+    if (textRange.isEmpty()) {
+      return;
+    }
+    String htmlMsg = getHtmlMessage(vulnerability);
+
+    Annotation annotation = annotationHolder
+      .createAnnotation(getSeverity(vulnerability.severity()), textRange, vulnerability.message(), htmlMsg);
+    annotation.registerFix(new ShowTaintVulnerabilityRuleDescriptionIntentionAction(vulnerability));
+    annotation.setTextAttributes(getTextAttrsKey(vulnerability.severity()));
+
+    /*
+     * 3 possible ways to set text attributes and error stripe color:
+     * - enforce text attributes ({@link Annotation#setEnforcedTextAttributes}) and we need to set everything
+     * manually (including error stripe color). This won't be configurable in a standard way and won't change based on used color scheme
+     * - rely on one of the default attributes by giving a key {@link com.intellij.openapi.editor.colors.CodeInsightColors} or your own
+     * key (SonarLintTextAttributes) to Annotation#setTextAttributes
+     * - let Annotation#getTextAttributes decide it based on highlight type and severity.
+     */
+    annotation.setHighlightType(getType(vulnerability.severity()));
   }
 
   static TextAttributesKey getTextAttrsKey(@Nullable String severity) {
@@ -161,18 +203,27 @@ public class SonarExternalAnnotator extends ExternalAnnotator<SonarExternalAnnot
       shortcut = "(" + KeymapUtil.getShortcutsText(keymap.getShortcuts(IdeActions.ACTION_SHOW_ERROR_DESCRIPTION)) + ")";
     }
 
-    String flows = "";
-    if (!issue.flows().isEmpty()) {
-      int numLocations = issue.flows().stream().mapToInt(f -> f.locations().size()).sum();
-      flows = String.format(" [+%d %s]", numLocations, SonarLintUtils.pluralize("location", numLocations));
-    }
-
     @NonNls
     final String link = " <a "
       + "href=\"#sonarissue/" + issue.getRuleKey() + "\""
       + (UIUtil.isUnderDarcula() ? " color=\"7AB4C9\" " : "")
       + ">more...</a> " + shortcut;
-    return XmlStringUtil.wrapInHtml(XmlStringUtil.escapeString("SonarLint: " + issue.getMessage()) + flows + link);
+    return XmlStringUtil.wrapInHtml(XmlStringUtil.escapeString("SonarLint: " + issue.getMessage()) + issue.context().map(IssueContext::getSummaryDescription).orElse("") + link);
+  }
+  private static String getHtmlMessage(LocalTaintVulnerability vulnerability) {
+    String shortcut = "";
+    final KeymapManager keymapManager = KeymapManager.getInstance();
+    if (keymapManager != null) {
+      final Keymap keymap = keymapManager.getActiveKeymap();
+      shortcut = "(" + KeymapUtil.getShortcutsText(keymap.getShortcuts(IdeActions.ACTION_SHOW_ERROR_DESCRIPTION)) + ")";
+    }
+
+    @NonNls
+    final String link = " <a "
+      + "href=\"#sonarissue/" + vulnerability.ruleKey() + "\""
+      + (UIUtil.isUnderDarcula() ? " color=\"7AB4C9\" " : "")
+      + ">more...</a> " + shortcut;
+    return XmlStringUtil.wrapInHtml(XmlStringUtil.escapeString("SonarLint: " + vulnerability.message()) + link);
   }
 
   /**

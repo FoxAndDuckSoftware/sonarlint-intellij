@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -33,7 +33,6 @@ import java.net.URL;
 import java.util.Collection;
 import javax.swing.Icon;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JEditorPane;
 import javax.swing.JLabel;
@@ -62,7 +61,6 @@ public class ServerStep extends AbstractWizardStepEx {
   private JLabel sonarqubeIcon;
   private JEditorPane sonarcloudText;
   private JEditorPane sonarqubeText;
-  private JCheckBox proxyCheck;
   private JButton proxyButton;
   private ErrorPainter errorPainter;
 
@@ -105,11 +103,8 @@ public class ServerStep extends AbstractWizardStepEx {
       });
     }
 
-    proxyCheck.setMnemonic('y');
-    proxyCheck.setEnabled(HttpConfigurable.getInstance().USE_HTTP_PROXY);
     proxyButton.addActionListener(evt -> {
       HttpConfigurable.editConfigurable(panel);
-      proxyCheck.setEnabled(HttpConfigurable.getInstance().USE_HTTP_PROXY);
     });
 
     load(editing);

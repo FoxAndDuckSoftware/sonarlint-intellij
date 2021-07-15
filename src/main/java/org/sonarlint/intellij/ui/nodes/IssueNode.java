@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -26,15 +26,14 @@ import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import icons.SonarLintIcons;
+import java.util.Locale;
 import javax.annotation.Nonnull;
 import javax.swing.Icon;
 import org.sonarlint.intellij.issue.LiveIssue;
+import org.sonarlint.intellij.issue.tracking.Trackable;
 import org.sonarlint.intellij.ui.tree.TreeCellRenderer;
 import org.sonarlint.intellij.util.CompoundIcon;
-import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.client.api.util.DateUtils;
-
-import java.util.Locale;
 
 import static com.intellij.ui.SimpleTextAttributes.STYLE_SMALLER;
 
@@ -44,8 +43,8 @@ public class IssueNode extends AbstractNode {
 
   private final LiveIssue issue;
 
-  public IssueNode(LiveIssue issue) {
-    this.issue = issue;
+  public IssueNode(Trackable issue) {
+    this.issue = ((LiveIssue) issue);
   }
 
   @Override public void render(TreeCellRenderer renderer) {
@@ -55,7 +54,7 @@ public class IssueNode extends AbstractNode {
     if (type != null) {
       String typeStr = type.replace('_', ' ').toLowerCase(Locale.ENGLISH);
       renderer.setIconToolTip(severity + " " + typeStr);
-      int gap = JBUI.isHiDPI() ? 8 : 4;
+      int gap = JBUI.isUsrHiDPI() ? 8 : 4;
       setIcon(renderer, new CompoundIcon(CompoundIcon.Axis.X_AXIS, gap, SonarLintIcons.type12(type), SonarLintIcons.severity12(severity)));
     } else {
       renderer.setIconToolTip(severity);
@@ -72,11 +71,7 @@ public class IssueNode extends AbstractNode {
       renderer.append(issue.getMessage(), SimpleTextAttributes.GRAY_ATTRIBUTES);
     }
 
-    if (!issue.flows().isEmpty()) {
-      int numLocations = issue.flows().stream().mapToInt(f -> f.locations().size()).sum();
-      String flows = String.format(" [+%d %s]", numLocations, SonarLintUtils.pluralize("location", numLocations));
-      renderer.append(flows, GRAYED_SMALL_ATTRIBUTES);
-    }
+    issue.context().ifPresent(context -> renderer.append(context.getSummaryDescription(), GRAYED_SMALL_ATTRIBUTES));
 
     if (issue.getCreationDate() != null) {
       renderer.append(" ");

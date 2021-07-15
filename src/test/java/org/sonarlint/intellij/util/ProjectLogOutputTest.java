@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -23,8 +23,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
-import org.sonarlint.intellij.ui.SonarLintConsole;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
 import org.sonarsource.sonarlint.core.client.api.common.LogOutput;
 
 import static org.mockito.Mockito.mock;
@@ -38,7 +37,6 @@ public class ProjectLogOutputTest extends AbstractSonarLintLightTests {
 
   @Before
   public void prepare() {
-    replaceProjectService(SonarLintProjectSettings.class, getProjectSettings());
     replaceProjectService(SonarLintConsole.class, mockConsole);
     getProjectSettings().setAnalysisLogsEnabled(true);
     logOutput = new ProjectLogOutput(getProject());

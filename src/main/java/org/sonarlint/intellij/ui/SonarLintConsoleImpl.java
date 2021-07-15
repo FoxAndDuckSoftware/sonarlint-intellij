@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -25,26 +25,25 @@ import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.serviceContainer.NonInjectable;
+
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import org.sonarlint.intellij.config.project.SonarLintProjectSettings;
-import org.sonarlint.intellij.util.SonarLintUtils;
+
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
+
+import static org.sonarlint.intellij.config.Settings.getSettingsFor;
 
 public class SonarLintConsoleImpl implements SonarLintConsole, Disposable {
 
   private ConsoleView consoleView;
   private final Project myProject;
 
-
   public SonarLintConsoleImpl(Project project) {
     this.myProject = project;
   }
 
-  /**
-   * TODO Replace @Deprecated with @NonInjectable when switching to 2019.3 API level
-   * @deprecated in 4.2 to silence a check in 2019.3
-   */
-  @Deprecated
+  @NonInjectable
   SonarLintConsoleImpl(Project project, ConsoleView consoleView) {
     this.consoleView = consoleView;
     this.myProject = project;
@@ -52,15 +51,14 @@ public class SonarLintConsoleImpl implements SonarLintConsole, Disposable {
 
   @Override
   public void debug(String msg) {
-    SonarLintProjectSettings settings = SonarLintUtils.getService(myProject, SonarLintProjectSettings.class);
-    if (settings.isVerboseEnabled()) {
+    if (debugEnabled()) {
       getConsoleView().print(msg + "\n", ConsoleViewContentType.NORMAL_OUTPUT);
     }
   }
 
   @Override
   public boolean debugEnabled() {
-    return SonarLintUtils.getService(myProject, SonarLintProjectSettings.class).isVerboseEnabled();
+    return getSettingsFor(myProject).isVerboseEnabled();
   }
 
   @Override
@@ -82,14 +80,14 @@ public class SonarLintConsoleImpl implements SonarLintConsole, Disposable {
   }
 
   @Override
-  public void clear() {
+  public synchronized void clear() {
     if (consoleView != null) {
-      getConsoleView().clear();
+      consoleView.clear();
     }
   }
 
   @Override
-  public ConsoleView getConsoleView() {
+  public synchronized ConsoleView getConsoleView() {
     if (consoleView == null) {
       consoleView = TextConsoleBuilderFactory.getInstance().createBuilder(myProject).getConsole();
     }
@@ -98,7 +96,7 @@ public class SonarLintConsoleImpl implements SonarLintConsole, Disposable {
 
   @Override
   public void dispose() {
-    if(consoleView != null){
+    if (consoleView != null) {
       Disposer.dispose(consoleView);
     }
   }

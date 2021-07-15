@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -23,22 +23,20 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import org.jetbrains.annotations.NotNull;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.util.GlobalLogOutput;
-import org.sonarlint.intellij.util.SonarLintUtils;
-import org.sonarsource.sonarlint.core.WsHelperImpl;
-import org.sonarsource.sonarlint.core.client.api.connected.ServerConfiguration;
+import org.sonarsource.sonarlint.core.client.api.connected.ConnectionValidator;
 import org.sonarsource.sonarlint.core.client.api.connected.ValidationResult;
-import org.sonarsource.sonarlint.core.client.api.connected.WsHelper;
+import org.sonarsource.sonarlint.core.serverapi.ServerApiHelper;
 
 public class ConnectionTestTask extends Task.Modal {
   private static final Logger LOGGER = Logger.getInstance(ConnectionTestTask.class);
-  private final SonarQubeServer server;
+  private final ServerConnection server;
   private Exception exception;
   private ValidationResult result;
 
-  public ConnectionTestTask(SonarQubeServer server) {
-    super(null, "Test Connection to SonarQube Server", true);
+  public ConnectionTestTask(ServerConnection server) {
+    super(null, "Test Connection to " + (server.isSonarCloud() ? "SonarCloud" : "SonarQube"), true);
     this.server = server;
   }
 
@@ -48,9 +46,8 @@ public class ConnectionTestTask extends Task.Modal {
     indicator.setIndeterminate(true);
 
     try {
-      ServerConfiguration serverConfiguration = SonarLintUtils.getServerConfiguration(server);
-      WsHelper wsHelper = new WsHelperImpl();
-      result = wsHelper.validateConnection(serverConfiguration);
+      ConnectionValidator connectionValidator = new ConnectionValidator(new ServerApiHelper(server.getEndpointParams(), server.getHttpClient()));
+      result = connectionValidator.validateConnection();
     } catch (Exception e) {
       String msg = "Connection test failed";
       LOGGER.info(msg, e);

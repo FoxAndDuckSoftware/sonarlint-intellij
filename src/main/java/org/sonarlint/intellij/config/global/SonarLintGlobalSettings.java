@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,17 +19,11 @@
  */
 package org.sonarlint.intellij.config.global;
 
-import com.intellij.openapi.application.PathManager;
-import com.intellij.openapi.components.ExportableApplicationComponent;
-import com.intellij.openapi.components.PersistentStateComponent;
-import com.intellij.openapi.components.State;
-import com.intellij.openapi.components.Storage;
-import com.intellij.util.xmlb.XmlSerializerUtil;
 import com.intellij.util.xmlb.annotations.Attribute;
+import com.intellij.util.xmlb.annotations.OptionTag;
 import com.intellij.util.xmlb.annotations.Transient;
 import com.intellij.util.xmlb.annotations.XCollection;
 import com.intellij.util.xmlb.annotations.XMap;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,25 +36,51 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.sonarlint.intellij.util.SonarLintBundle;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
-@State(name = "SonarLintGlobalSettings", storages = {@Storage("sonarlint.xml")})
-public final class SonarLintGlobalSettings implements PersistentStateComponent<SonarLintGlobalSettings>, ExportableApplicationComponent {
+import static org.sonarlint.intellij.util.SonarLintUtils.equalsIgnoringTrailingSlash;
+
+public final class SonarLintGlobalSettings {
 
   private boolean autoTrigger = true;
-  private List<SonarQubeServer> servers = new LinkedList<>();
+  private String nodejsPath = "";
+  private List<ServerConnection> servers = new LinkedList<>();
   private List<String> fileExclusions = new LinkedList<>();
   @Deprecated
   private Set<String> includedRules;
   @Deprecated
   private Set<String> excludedRules;
   @XCollection(propertyElementName = "rules", elementName = "rule")
-  private Collection<Rule> rules = new HashSet<>();
+  Collection<Rule> rules = new HashSet<>();
   @Transient
-  private Map<String, Rule> rulesByKey = new HashMap<>();
+  Map<String, Rule> rulesByKey = new HashMap<>();
+  private boolean taintVulnerabilitiesTabDisclaimerDismissed;
+  private boolean secretsNeverBeenAnalysed = true;
+
+  public void rememberNotificationOnSecretsBeenSent() {
+    setSecretsNeverBeenAnalysed(false);
+  }
+
+  public boolean isSecretsNeverBeenAnalysed() {
+    return secretsNeverBeenAnalysed;
+  }
+
+  public void setSecretsNeverBeenAnalysed(boolean secretsNeverBeenAnalysed) {
+    this.secretsNeverBeenAnalysed = secretsNeverBeenAnalysed;
+  }
+
+  public boolean isTaintVulnerabilitiesTabDisclaimerDismissed() {
+    return taintVulnerabilitiesTabDisclaimerDismissed;
+  }
+
+  public void dismissTaintVulnerabilitiesTabDisclaimer() {
+    setTaintVulnerabilitiesTabDisclaimerDismissed(true);
+  }
+
+  // used for deserializing
+  public void setTaintVulnerabilitiesTabDisclaimerDismissed(boolean dismissed) {
+    this.taintVulnerabilitiesTabDisclaimerDismissed = dismissed;
+  }
 
   public void setRuleParam(String ruleKey, String paramName, String paramValue) {
     rulesByKey.computeIfAbsent(ruleKey, s -> new Rule(ruleKey, true)).getParams().put(paramName, paramValue);
@@ -95,39 +115,8 @@ public final class SonarLintGlobalSettings implements PersistentStateComponent<S
     }
   }
 
-  @Override
-  public SonarLintGlobalSettings getState() {
-    this.rules = rulesByKey.values();
-    return this;
-  }
-
-  @Override
-  public void loadState(SonarLintGlobalSettings state) {
-    XmlSerializerUtil.copyBean(state, this);
-    initializeRulesByKey();
-  }
-
   private void initializeRulesByKey() {
     this.rulesByKey = new HashMap<>(rules.stream().collect(Collectors.toMap(Rule::getKey, Function.identity())));
-  }
-
-  @Override
-  @NotNull
-  public File[] getExportFiles() {
-    return new File[] {PathManager.getOptionsFile("sonarlint")};
-  }
-
-  @Override
-  @NotNull
-  public String getPresentableName() {
-    return SonarLintBundle.message("sonarlint.settings");
-  }
-
-  @Override
-  @NotNull
-  @NonNls
-  public String getComponentName() {
-    return "SonarLintGlobalSettings";
   }
 
   public Map<String, Rule> getRulesByKey() {
@@ -155,13 +144,6 @@ public final class SonarLintGlobalSettings implements PersistentStateComponent<S
     initializeRulesByKey();
   }
 
-  public Set<String> excludedRules() {
-    return rulesByKey.entrySet().stream()
-      .filter(it -> !it.getValue().isActive)
-      .map(Map.Entry::getKey)
-      .collect(Collectors.toSet());
-  }
-
   public boolean isAutoTrigger() {
     return autoTrigger;
   }
@@ -170,14 +152,36 @@ public final class SonarLintGlobalSettings implements PersistentStateComponent<S
     this.autoTrigger = autoTrigger;
   }
 
-  public List<SonarQubeServer> getSonarQubeServers() {
+  public String getNodejsPath() {
+    return nodejsPath;
+  }
+
+  public void setNodejsPath(String nodejsPath) {
+    this.nodejsPath = nodejsPath;
+  }
+
+  // Don't change annotation, used for backward compatibility
+  @OptionTag("sonarQubeServers")
+  public List<ServerConnection> getServerConnections() {
     return this.servers;
   }
 
-  public void setSonarQubeServers(List<SonarQubeServer> servers) {
+  public void setServerConnections(List<ServerConnection> servers) {
     this.servers = Collections.unmodifiableList(servers.stream()
       .filter(s -> !SonarLintUtils.isBlank(s.getName()))
       .collect(Collectors.toList()));
+  }
+
+  public void addServerConnection(ServerConnection connection) {
+    ArrayList<ServerConnection> sonarQubeServers = new ArrayList<>(servers);
+    sonarQubeServers.add(connection);
+    this.servers = Collections.unmodifiableList(sonarQubeServers);
+  }
+
+  public Set<String> getServerNames() {
+    return servers.stream()
+      .map(ServerConnection::getName)
+      .collect(Collectors.toSet());
   }
 
   public List<String> getFileExclusions() {
@@ -218,6 +222,12 @@ public final class SonarLintGlobalSettings implements PersistentStateComponent<S
   @Deprecated
   public void setExcludedRules(Set<String> excludedRules) {
     this.excludedRules = excludedRules;
+  }
+
+  public List<ServerConnection> getConnectionsTo(String serverUrl) {
+    return servers.stream()
+      .filter(it -> equalsIgnoringTrailingSlash(it.getHostUrl(), serverUrl))
+      .collect(Collectors.toList());
   }
 
   public static class Rule {

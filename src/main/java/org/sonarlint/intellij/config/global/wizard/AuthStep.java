@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -28,7 +28,6 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.ui.DocumentAdapter;
 import java.awt.CardLayout;
 import java.awt.event.ItemEvent;
-import java.util.List;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -40,11 +39,8 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.tasks.ConnectionTestTask;
-import org.sonarlint.intellij.tasks.GetOrganizationTask;
-import org.sonarlint.intellij.tasks.InformationFetchTask;
-import org.sonarsource.sonarlint.core.client.api.connected.RemoteOrganization;
 import org.sonarsource.sonarlint.core.client.api.connected.ValidationResult;
 
 public class AuthStep extends AbstractWizardStepEx {
@@ -58,7 +54,7 @@ public class AuthStep extends AbstractWizardStepEx {
   private JTextField loginField;
   private JPasswordField passwordField;
   private JPanel cardPanel;
-  private JButton tokenButton;
+  private JButton openTokenCreationPageButton;
   private ErrorPainter errorPainter;
 
   public AuthStep(WizardModel model) {
@@ -81,10 +77,11 @@ public class AuthStep extends AbstractWizardStepEx {
       }
     });
 
-    tokenButton.addActionListener(evt -> generateToken());
+    openTokenCreationPageButton.addActionListener(evt -> openTokenCreationPage());
 
     DocumentListener listener = new DocumentAdapter() {
-      @Override protected void textChanged(DocumentEvent e) {
+      @Override
+      protected void textChanged(DocumentEvent e) {
         fireStateChanged();
       }
     };
@@ -137,23 +134,32 @@ public class AuthStep extends AbstractWizardStepEx {
     return panel;
   }
 
-  @NotNull @Override public Object getStepId() {
+  @NotNull
+  @Override
+  public Object getStepId() {
     return AuthStep.class;
   }
 
-  @Nullable @Override public Object getNextStepId() {
-    List<RemoteOrganization> orgList = model.getOrganizationList();
-    if (orgList != null && orgList.size() > 1) {
+  @Nullable
+  @Override
+  public Object getNextStepId() {
+    if (model.getServerType() == WizardModel.ServerType.SONARCLOUD) {
       return OrganizationStep.class;
+    }
+    if (model.isNotificationsSupported()) {
+      return NotificationsStep.class;
     }
     return ConfirmStep.class;
   }
 
-  @Nullable @Override public Object getPreviousStepId() {
+  @Nullable
+  @Override
+  public Object getPreviousStepId() {
     return ServerStep.class;
   }
 
-  @Override public boolean isComplete() {
+  @Override
+  public boolean isComplete() {
     if (authComboBox.getSelectedItem().equals(LOGIN_ITEM)) {
       boolean passValid = passwordField.getPassword().length > 0;
       boolean loginValid = !loginField.getText().isEmpty();
@@ -170,50 +176,42 @@ public class AuthStep extends AbstractWizardStepEx {
     }
   }
 
-  @Override public void commit(CommitType commitType) throws CommitStepException {
+  @Override
+  public void commit(CommitType commitType) throws CommitStepException {
     if (commitType == CommitType.Finish || commitType == CommitType.Next) {
       save();
       checkConnection();
-      fetchInformation();
+      tryQueryIfNotificationsSupported();
+      tryQueryOrganizations();
     }
   }
 
-  private void fetchInformation() throws CommitStepException {
-    SonarQubeServer tmpServer = model.createServerWithoutOrganization();
-    InformationFetchTask task = new InformationFetchTask(tmpServer);
-    ProgressManager.getInstance().run(task);
-    if (task.getException() != null) {
-      String msg = "Failed to fetch information from the server. Please check the configuration and try again.";
-      if (task.getException().getMessage() != null) {
-        msg = msg + " Error: " + task.getException().getMessage();
+  private void tryQueryOrganizations() throws CommitStepException {
+    try {
+      model.queryOrganizations();
+    } catch (Exception e) {
+      String msg = "Failed to query organizations. Please check the configuration and try again.";
+      if (e.getMessage() != null) {
+        msg = msg + " Error: " + e.getMessage();
       }
       throw new CommitStepException(msg);
     }
+  }
 
-    model.setOrganizationList(task.organizations());
-    model.setNotificationsSupported(task.notificationsSupported());
-
-    if (task.organizations().size() == 1) {
-      // for sonarqube not supporting organizations, there will only be the default one
-      model.setOrganizationKey(task.organizations().iterator().next().getKey());
-    } else if (model.getOrganizationKey() != null) {
-      // the previously configured organization might not be in the list. If that's the case, fetch it and add it to the list.
-      boolean orgExists = task.organizations().stream().anyMatch(o -> o.getKey().equals(model.getOrganizationKey()));
-      if (!orgExists) {
-        GetOrganizationTask getOrganizationTask = new GetOrganizationTask(tmpServer, model.getOrganizationKey());
-        ProgressManager.getInstance().run(getOrganizationTask);
-        if (getOrganizationTask.getException() != null || !getOrganizationTask.organization().isPresent()) {
-          // ignore and reset organization
-          model.setOrganizationKey(null);
-        } else {
-          model.getOrganizationList().add(getOrganizationTask.organization().get());
-        }
+  private void tryQueryIfNotificationsSupported() throws CommitStepException {
+    try {
+      model.queryIfNotificationsSupported();
+    } catch (Exception e) {
+      String msg = "Failed to contact the server. Please check the configuration and try again.";
+      if (e.getMessage() != null) {
+        msg = msg + " Error: " + e.getMessage();
       }
+      throw new CommitStepException(msg);
     }
   }
 
   private void checkConnection() throws CommitStepException {
-    SonarQubeServer tmpServer = model.createServerWithoutOrganization();
+    ServerConnection tmpServer = model.createConnectionWithoutOrganization();
     ConnectionTestTask test = new ConnectionTestTask(tmpServer);
     ProgressManager.getInstance().run(test);
     ValidationResult r = test.result();
@@ -228,7 +226,9 @@ public class AuthStep extends AbstractWizardStepEx {
     }
   }
 
-  @Nullable @Override public JComponent getPreferredFocusedComponent() {
+  @Nullable
+  @Override
+  public JComponent getPreferredFocusedComponent() {
     if (authComboBox.isEnabled()) {
       return authComboBox;
     }
@@ -239,7 +239,7 @@ public class AuthStep extends AbstractWizardStepEx {
     authComboBox = new ComboBox();
   }
 
-  private void generateToken() {
+  private void openTokenCreationPage() {
     if (!BrowserUtil.isAbsoluteURL(model.getServerUrl())) {
       Messages.showErrorDialog(panel, "Can't launch browser for URL: " + model.getServerUrl(), "Invalid Server URL");
       return;

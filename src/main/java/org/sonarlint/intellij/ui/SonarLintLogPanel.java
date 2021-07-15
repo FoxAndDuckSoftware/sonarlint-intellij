@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -34,6 +34,7 @@ import com.intellij.util.messages.MessageBusConnection;
 import javax.swing.Box;
 import org.sonarlint.intellij.actions.ToolWindowLogAnalysisAction;
 import org.sonarlint.intellij.actions.ToolWindowVerboseModeAction;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
 import org.sonarlint.intellij.messages.StatusListener;
 import org.sonarlint.intellij.util.SonarLintActions;
 import org.sonarlint.intellij.util.SonarLintUtils;
@@ -89,6 +90,8 @@ public class SonarLintLogPanel extends SimpleToolWindowPanel {
 
   private void addConsole() {
     ConsoleView consoleView = SonarLintUtils.getService(project, SonarLintConsole.class).getConsoleView();
-    super.setContent(consoleView.getComponent());
+    if (consoleView != null) {
+      super.setContent(consoleView.getComponent());
+    }
   }
 }

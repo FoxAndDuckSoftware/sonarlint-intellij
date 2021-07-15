@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -22,16 +22,13 @@ package org.sonarlint.intellij.core;
 import java.util.Collections;
 import java.util.Date;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.mockito.Mockito;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
-import org.sonarlint.intellij.config.global.SonarLintGlobalSettings;
-import org.sonarlint.intellij.config.global.SonarQubeServer;
+import org.sonarlint.intellij.config.global.ServerConnection;
 import org.sonarlint.intellij.exception.InvalidBindingException;
-import org.sonarlint.intellij.util.SonarLintUtils;
 import org.sonarsource.sonarlint.core.client.api.connected.ConnectedSonarLintEngine;
 import org.sonarsource.sonarlint.core.client.api.connected.ProjectStorageStatus;
 import org.sonarsource.sonarlint.core.client.api.standalone.StandaloneSonarLintEngine;
@@ -63,12 +60,11 @@ public class SonarLintEngineManagerTest extends AbstractSonarLintLightTests {
     when(engineFactory.createEngine(anyString())).thenReturn(connectedEngine);
     when(engineFactory.createEngine()).thenReturn(standaloneEngine);
 
-    manager = new SonarLintEngineManager();
-    SonarLintUtils.getService(SonarLintGlobalSettings.class).setSonarQubeServers(Collections.emptyList());
+    manager = new SonarLintEngineManager(engineFactory);
+    getGlobalSettings().setServerConnections(Collections.emptyList());
   }
 
   @Test
-  @Ignore
   public void should_get_standalone() {
     assertThat(manager.getStandaloneEngine()).isEqualTo(standaloneEngine);
     assertThat(manager.getStandaloneEngine()).isEqualTo(standaloneEngine);
@@ -76,7 +72,6 @@ public class SonarLintEngineManagerTest extends AbstractSonarLintLightTests {
   }
 
   @Test
-  @Ignore
   public void should_get_connected() {
     assertThat(manager.getConnectedEngine("server1")).isEqualTo(connectedEngine);
     assertThat(manager.getConnectedEngine("server1")).isEqualTo(connectedEngine);
@@ -92,8 +87,7 @@ public class SonarLintEngineManagerTest extends AbstractSonarLintLightTests {
 
   @Test
   public void should_fail_not_updated() throws InvalidBindingException {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
-    globalSettings.setSonarQubeServers(Collections.singletonList(createServer("server1")));
+    getGlobalSettings().setServerConnections(Collections.singletonList(createServer("server1")));
     manager = new SonarLintEngineManager();
 
 
@@ -103,14 +97,12 @@ public class SonarLintEngineManagerTest extends AbstractSonarLintLightTests {
   }
 
   @Test
-  @Ignore
   public void should_pass_checks() throws InvalidBindingException {
-    SonarLintGlobalSettings globalSettings = SonarLintUtils.getService(SonarLintGlobalSettings.class);
     when(connectedEngine.getState()).thenReturn(ConnectedSonarLintEngine.State.UPDATED);
     when(connectedEngine.getProjectStorageStatus("project1")).thenReturn(projectOk);
 
-    globalSettings.setSonarQubeServers(Collections.singletonList(createServer("server1")));
-    manager = new SonarLintEngineManager();
+    getGlobalSettings().setServerConnections(Collections.singletonList(createServer("server1")));
+    manager = new SonarLintEngineManager(engineFactory);
 
     assertThat(manager.getConnectedEngine(notifications, "server1", "project1")).isEqualTo(connectedEngine);
 
@@ -118,8 +110,8 @@ public class SonarLintEngineManagerTest extends AbstractSonarLintLightTests {
     verify(connectedEngine).getState();
   }
 
-  private static SonarQubeServer createServer(String name) {
-    return SonarQubeServer.newBuilder().setName(name).build();
+  private static ServerConnection createServer(String name) {
+    return ServerConnection.newBuilder().setName(name).build();
   }
 
   private static ProjectStorageStatus projectOk = new ProjectStorageStatus() {

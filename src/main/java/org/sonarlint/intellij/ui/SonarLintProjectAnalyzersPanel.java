@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.table.AbstractTableModel;
@@ -59,7 +60,10 @@ public class SonarLintProjectAnalyzersPanel {
   public void reload() {
     ProjectBindingManager bindingManager = SonarLintUtils.getService(project, ProjectBindingManager.class);
     try {
-      Collection<PluginDetails> loadedAnalyzers = bindingManager.getFacade().getLoadedAnalyzers();
+      Collection<PluginDetails> loadedAnalyzers = bindingManager.getFacade().getPluginDetails()
+        .stream()
+        .filter(pluginDetails -> !pluginDetails.skipReason().isPresent())
+        .collect(Collectors.toList());
       tableModel.set(loadedAnalyzers);
     } catch (Exception e) {
       LOGGER.error(e);

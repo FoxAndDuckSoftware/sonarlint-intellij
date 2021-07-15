@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -19,19 +19,22 @@
  */
 package org.sonarlint.intellij.issue.persistence;
 
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import java.io.IOException;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.sonarlint.intellij.AbstractSonarLintLightTests;
 import org.sonarlint.intellij.issue.LiveIssue;
 
+import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -45,82 +48,88 @@ import static org.mockito.Mockito.when;
 
 public class LiveIssueCacheTest extends AbstractSonarLintLightTests {
 
+  private static final int MAX_ENTRIES_FOR_TEST = 10;
   private IssuePersistence store = mock(IssuePersistence.class);
-  @Rule
-  public ExpectedException exception = ExpectedException.none();
 
   private LiveIssueCache cache;
 
   @Before
   public void before() {
     replaceProjectService(IssuePersistence.class, store);
-    cache = new LiveIssueCache(getProject());
+    cache = new LiveIssueCache(getProject(), MAX_ENTRIES_FOR_TEST);
   }
 
   @Test
   public void should_save_and_read_cache_only() {
-    VirtualFile file = createTestFile("file1");
-    LiveIssue issue1 = createTestIssue("will be overwritten");
-    LiveIssue issue2 = createTestIssue("r1");
-    cache.save(file, Collections.singleton(issue1));
-    cache.save(file, Collections.singleton(issue2));
+    VirtualFile file = myFixture.copyFileToProject("foo.php", "foo.php");
+    LiveIssue issue = createTestIssue("r1");
+    cache.insertIssue(file, issue);
 
     assertThat(cache.contains(file)).isTrue();
-    assertThat(cache.getLive(file)).containsOnly(issue2);
+    assertThat(cache.getLive(file)).containsOnly(issue);
 
-    assertThat(cache.contains(createTestFile("file2"))).isFalse();
+    assertThat(cache.contains(myFixture.copyFileToProject("foo.php", "foo2.php"))).isFalse();
 
     verifyZeroInteractions(store);
   }
 
   @Test
   public void should_return_contains_even_if_empty() {
-    VirtualFile file = createTestFile("file1");
-    cache.save(file, Collections.emptyList());
+    VirtualFile file = myFixture.copyFileToProject("foo.php", "foo.php");
+    LiveIssue issue = createTestIssue("r1");
+
+    cache.insertIssue(file, issue);
+    cache.removeIssues(file, singletonList(issue));
+
     assertThat(cache.contains(file)).isTrue();
     assertThat(cache.getLive(file)).isEmpty();
   }
 
   @Test
   public void should_not_fallback_persistence() {
-    VirtualFile file = createTestFile("file1");
+    VirtualFile file = myFixture.copyFileToProject("foo.php", "foo.php");
     LiveIssue issue1 = createTestIssue("r1");
-    cache.save(file, Collections.singleton(issue1));
 
-    VirtualFile cacheMiss = createTestFile("file2");
+    cache.insertIssue(file, issue1);
+
+    VirtualFile cacheMiss = myFixture.copyFileToProject("foo.php", "foo2.php");
     assertThat(cache.getLive(cacheMiss)).isNull();
 
     verifyZeroInteractions(store);
   }
 
   @Test
-  @Ignore
   public void should_flush_if_full() throws IOException {
     LiveIssue issue1 = createTestIssue("r1");
-    VirtualFile file0 = createTestFile("file0");
-    cache.save(file0, Collections.singleton(issue1));
+    VirtualFile file0 = myFixture.copyFileToProject("foo.php", "foo0.php");
+    cache.insertIssue(file0, issue1);
+    VirtualFile file1 = myFixture.copyFileToProject("foo.php", "foo1.php");
+    cache.insertIssue(file1, issue1);
 
-    for (int i = 1; i < 10; i++) {
-      VirtualFile file = createTestFile("file" + i);
-      cache.save(file, Collections.singleton(issue1));
+    for (int i = 2; i < MAX_ENTRIES_FOR_TEST; i++) {
+      VirtualFile file = myFixture.copyFileToProject("foo.php", "foo" + i + ".php");
+      cache.insertIssue(file, issue1);
     }
 
-    // oldest access should be file1 after this
+    // oldest access should be foo1.php after this
     assertThat(cache.getLive(file0)).containsOnly(issue1);
 
     verifyZeroInteractions(store);
 
-    VirtualFile file = createTestFile("anotherfile");
-    cache.save(file, Collections.singleton(issue1));
+    VirtualFile file = myFixture.copyFileToProject("foo.php", "anotherfile.php");
+    cache.insertIssue(file, issue1);
 
-    verify(store).save(eq("file1"), anyCollection());
+    verify(store).save(eq("foo1.php"), anyCollection());
+    assertThat(cache.getLive(file0)).containsOnly(issue1);
+    // File1 has been flushed
+    assertThat(cache.getLive(file1)).isNull();
   }
 
   @Test
   public void should_clear_store() {
     LiveIssue issue1 = createTestIssue("r1");
-    VirtualFile file0 = createTestFile("file0");
-    cache.save(file0, Collections.singleton(issue1));
+    VirtualFile file0 = myFixture.copyFileToProject("foo.php", "foo0.php");
+    cache.insertIssue(file0, issue1);
 
     cache.clear();
     verify(store).clear();
@@ -128,81 +137,89 @@ public class LiveIssueCacheTest extends AbstractSonarLintLightTests {
   }
 
   @Test
-  @Ignore
   public void should_clear_specific_files() throws IOException {
     LiveIssue issue1 = createTestIssue("r1");
-    VirtualFile file0 = createTestFile("file0");
-    cache.save(file0, Collections.singleton(issue1));
+    VirtualFile file0 = myFixture.copyFileToProject("foo.php", "foo0.php");
+    cache.insertIssue(file0, issue1);
 
     LiveIssue issue2 = createTestIssue("r2");
-    VirtualFile file1 = createTestFile("file1");
-    cache.save(file1, Collections.singleton(issue2));
+    VirtualFile file1 = myFixture.copyFileToProject("foo.php", "foo1.php");
+    cache.insertIssue(file1, issue2);
 
     cache.clear(file1);
-    verify(store).clear("file1");
+    verify(store).clear("foo1.php");
     assertThat(cache.getLive(file1)).isNull();
     assertThat(cache.getLive(file0)).isNotNull();
   }
 
   @Test
-  @Ignore
-  public void should_flush_when_requested() throws IOException {
+  public void should_flush_all() throws IOException {
     LiveIssue issue1 = createTestIssue("r1");
-    VirtualFile file0 = createTestFile("file0");
-    cache.save(file0, Collections.singleton(issue1));
-    VirtualFile file1 = createTestFile("file1");
-    cache.save(file1, Collections.singleton(issue1));
+    VirtualFile file0 = myFixture.copyFileToProject("foo.php", "foo0.php");
+    cache.insertIssue(file0, issue1);
+    VirtualFile file1 = myFixture.copyFileToProject("foo.php", "foo1.php");
+    cache.insertIssue(file1, issue1);
 
     cache.flushAll();
 
-    verify(store).save(eq("file0"), anyCollection());
-    verify(store).save(eq("file1"), anyCollection());
+    verify(store).save(eq("foo0.php"), anyCollection());
+    verify(store).save(eq("foo1.php"), anyCollection());
     verifyNoMoreInteractions(store);
   }
 
   @Test
-  @Ignore
-  public void error_flush() throws IOException {
+  public void handle_error_flush() throws IOException {
     doThrow(new IOException()).when(store).save(anyString(), anyCollection());
 
     LiveIssue issue1 = createTestIssue("r1");
-    VirtualFile file0 = createTestFile("file0");
-    // TODO how to link created file to module
-    cache.save(file0, Collections.singleton(issue1));
+    VirtualFile file0 = myFixture.copyFileToProject("foo.php", "foo0.php");
+    cache.insertIssue(file0, issue1);
 
-    exception.expect(IllegalStateException.class);
-    cache.flushAll();
+    assertThrows(IllegalStateException.class, () -> cache.flushAll());
   }
 
   @Test
-  @Ignore
   public void error_remove_eldest() throws IOException {
     doThrow(new IOException()).when(store).save(anyString(), anyCollection());
 
     LiveIssue issue1 = createTestIssue("r1");
-    for (int i = 0; i < 10; i++) {
-      VirtualFile file = createTestFile("file" + i);
-      cache.save(file, Collections.singleton(issue1));
+    for (int i = 0; i < MAX_ENTRIES_FOR_TEST; i++) {
+      VirtualFile file = myFixture.copyFileToProject("foo.php", "foo" + i + ".php");
+      cache.insertIssue(file, issue1);
     }
 
-    exception.expect(IllegalStateException.class);
-    cache.save(createTestFile("anotherfile"), Collections.singleton(issue1));
+    VirtualFile extraFile = myFixture.copyFileToProject("foo.php", "another.php");
+    assertThrows(IllegalStateException.class, () -> cache.insertIssue(extraFile, issue1));
   }
 
   @Test
-  @Ignore
-  public void should_flush_on_project_closing() throws IOException {
-    LiveIssue issue1 = createTestIssue("r1");
-    VirtualFile file0 = createTestFile("file0");
-    cache.save(file0, Collections.singleton(issue1));
-    VirtualFile file1 = createTestFile("file1");
-    cache.save(file1, Collections.singleton(issue1));
+  public void testConcurrentAccess() throws Exception {
+    VirtualFile file1 = myFixture.copyFileToProject("foo.php", "foo1.php");
+    VirtualFile file2 = myFixture.copyFileToProject("foo.php", "foo2.php");
 
-    cache.flushAll();
+    Runnable r = () -> {
+      cache.clear(file1);
+      LiveIssue issue1 = createTestIssue("r1");
+      cache.insertIssue(file1, issue1);
+      LiveIssue issue2 = createTestIssue("r2");
+      cache.insertIssue(file1, issue2);
+      cache.clear(file2);
+      LiveIssue issue3 = createTestIssue("r3");
+      cache.insertIssue(file2, issue3);
+      LiveIssue issue4 = createTestIssue("r4");
+      cache.insertIssue(file2, issue4);
+      Collection<LiveIssue> live = cache.getLive(file1);
+      if (live != null) {
+        assertThat(live).extracting(LiveIssue::getRuleKey).isSubsetOf("r1", "r2");
+      }
+    };
+    ExecutorService executor = Executors.newFixedThreadPool(10);
+    List<Future<?>> tasks = new ArrayList<>();
+    IntStream.range(1, 100).forEach(i -> tasks.add(executor.submit(r)));
+    for (Future<?> task : tasks) {
+      task.get(1, TimeUnit.MINUTES);
+    }
 
-    verify(store).save(eq("file0"), anyCollection());
-    verify(store).save(eq("file1"), anyCollection());
-    verifyNoMoreInteractions(store);
   }
 
   private LiveIssue createTestIssue(String ruleKey) {
@@ -216,10 +233,4 @@ public class LiveIssueCacheTest extends AbstractSonarLintLightTests {
     return issue;
   }
 
-  private VirtualFile createTestFile(String path) {
-    VirtualFile file = mock(VirtualFile.class);
-    when(file.isValid()).thenReturn(true);
-    // when(SonarLintAppUtils.getRelativePathForAnalysis(project, file)).thenReturn(path);
-    return file;
-  }
 }

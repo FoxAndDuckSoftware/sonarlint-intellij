@@ -1,6 +1,6 @@
 /*
  * SonarLint for IntelliJ IDEA
- * Copyright (C) 2015-2020 SonarSource
+ * Copyright (C) 2015-2021 SonarSource
  * sonarlint@sonarsource.com
  *
  * This program is free software; you can redistribute it and/or
@@ -28,8 +28,8 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.sonarlint.intellij.analysis.AnalysisCallback;
-import org.sonarlint.intellij.issue.IssueStore;
 import org.sonarlint.intellij.issue.IssueManager;
+import org.sonarlint.intellij.issue.IssueStore;
 import org.sonarlint.intellij.issue.LiveIssue;
 import org.sonarlint.intellij.util.SonarLintUtils;
 
@@ -60,7 +60,7 @@ public class ShowAnalysisResultsCallable implements AnalysisCallback {
   }
 
   private void showAnalysisResultsTab() {
-    UIUtil.invokeLaterIfNeeded(() -> SonarLintUtils.getService(project, IssuesViewTabOpener.class)
+    UIUtil.invokeLaterIfNeeded(() -> SonarLintUtils.getService(project, SonarLintToolWindow.class)
       .openAnalysisResults());
   }
 }
